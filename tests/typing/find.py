@@ -30,4 +30,4 @@ def find_one() -> Optional[Test]:
 
 
 def find_one_with_projection() -> Optional[ProjectionTest]:
-    return Test.find_one().project(projection_model=ProjectionTest)
+    return Test.find_one().project(projection_model=ProjectionTest).run()
