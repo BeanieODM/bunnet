@@ -9,8 +9,7 @@ hooks:
   pre-render:
     - mkdir -p docs/build/content
     - cp -r docs/assets docs/build/content
-    - cp docs/CNAME docs/build/content
-    
+
 renderer:  
   type: mkdocs
   output_directory: docs/build
@@ -29,7 +28,7 @@ renderer:
           toggle:
             icon: material/toggle-switch-off-outline
             name: Switch to light mode
-      logo: assets/logo.svg
+#      logo: assets/logo.svg
       favicon: assets/favicon.png
     extra_css:
       - assets/color_scheme.css
@@ -114,7 +113,7 @@ renderer:
                 - bunnet.odm.operators.update.*
         - title: Fields
           contents:
-            - beanie.odm.fields.*            
+            - bunnet.odm.fields.*
     - title: Development
       source: docs/development.md
     - title: Code of conduct
