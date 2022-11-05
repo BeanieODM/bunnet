@@ -61,6 +61,8 @@ from bunnet.odm.interfaces.aggregate import AggregateInterface
 from bunnet.odm.interfaces.detector import ModelType
 from bunnet.odm.interfaces.find import FindInterface
 from bunnet.odm.interfaces.getters import OtherGettersInterface
+from bunnet.odm.interfaces.inheritance import InheritanceInterface
+from bunnet.odm.interfaces.setters import SettersInterface
 from bunnet.odm.models import (
     InspectionResult,
     InspectionStatuses,
@@ -94,6 +96,8 @@ DocumentProjectionType = TypeVar("DocumentProjectionType", bound=BaseModel)
 
 class Document(
     BaseModel,
+    SettersInterface,
+    InheritanceInterface,
     FindInterface,
     AggregateInterface,
     OtherGettersInterface,

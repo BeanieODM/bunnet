@@ -91,7 +91,7 @@ class DocumentTestModelWithCustomCollectionName(Document):
     test_list: List[SubDocument]
     test_str: str
 
-    class Collection:
+    class Settings:
         name = "custom"
 
     # class Settings:
@@ -121,7 +121,7 @@ class DocumentTestModelWithComplexIndex(Document):
     test_list: List[SubDocument]
     test_str: str
 
-    class Collection:
+    class Settings:
         name = "docs_with_index"
         indexes = [
             "test_int",
@@ -155,12 +155,6 @@ class DocumentTestModelWithDroppedIndex(Document):
     test_list: List[SubDocument]
     test_str: str
 
-    class Collection:
-        name = "docs_with_index"
-        indexes = [
-            "test_int",
-        ]
-
     class Settings:
         name = "docs_with_index"
         indexes = [
@@ -174,9 +168,6 @@ class DocumentTestModelStringImport(Document):
 
 class DocumentTestModelFailInspection(Document):
     test_int_2: int
-
-    class Collection:
-        name = "DocumentTestModel"
 
     class Settings:
         name = "DocumentTestModel"
@@ -474,3 +465,57 @@ class HouseWithRevision(Document):
     class Settings:
         use_revision = True
         use_state_management = True
+
+
+class TunedDocument(Document):
+    # some common settings for all models in the file
+    class Settings:
+        is_root = True
+        use_state_management = True
+
+
+# classes for inheritance test
+class Vehicle(TunedDocument):
+    """Root parent for testing flat inheritance"""
+
+    #               Vehicle
+    #              /   |   \
+    #             /    |    \
+    #        Bicycle  Bike  Car
+    #                         \
+    #                          \
+    #                          Bus
+    color: str
+
+    @after_event(Insert)
+    def on_object_create(self):
+        # this event will be triggered for all children too (self will have corresponding type)
+        ...
+
+
+class Bicycle(Vehicle):
+    frame: int
+    wheels: int
+
+
+class Fuelled(BaseModel):
+    """Just a mixin"""
+
+    fuel: Optional[str]
+
+
+class Car(Vehicle, Fuelled):
+    body: str
+
+
+class Bike(Vehicle, Fuelled):
+    ...
+
+
+class Bus(Car, Fuelled):
+    seats: int
+
+
+class Owner(Document):
+    name: str
+    vehicles: List[Link[Vehicle]] = []

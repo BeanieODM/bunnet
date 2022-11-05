@@ -1,7 +1,7 @@
 import pytest
 from yarl import URL
 
-from bunnet.odm.utils.general import init_bunnet
+from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.documents import Document
 from bunnet.exceptions import CollectionWasNotInitialized
 from bunnet.odm.utils.projection import get_projection
