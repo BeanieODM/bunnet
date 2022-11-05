@@ -13,7 +13,7 @@ Depending on the business logic, parent `Document` can be like an "abstract" cla
 
 To set the root model you have to set `is_root = True` in the inner Settings class. All the inherited documents (on any level) will be stored in the same collection.
 
-```python
+```py hl_lines="20 20"
 from typing import Optional, List
 from pydantic import BaseModel
 from pymongo import MongoClient
