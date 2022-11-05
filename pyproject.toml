@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bunnet"
-version = "0.0.1"
+version = "0.1.0"
 description = "Synchronous Python ODM for MongoDB"
 authors = ["Roman <roman-right@protonmail.com>"]
 license = "Apache-2.0"

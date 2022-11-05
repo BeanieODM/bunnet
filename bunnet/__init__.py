@@ -24,7 +24,7 @@ from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.views import View
 from bunnet.odm.union_doc import UnionDoc
 
-__version__ = "1.14.0"
+__version__ = "0.1.0"
 __all__ = [
     # ODM
     "Document",
