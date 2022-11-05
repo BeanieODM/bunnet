@@ -19,12 +19,12 @@ from bunnet.odm.fields import (
     DeleteRules,
 )
 from bunnet.odm.settings.timeseries import TimeSeriesConfig, Granularity
-from bunnet.odm.utils.general import init_bunnet
 from bunnet.odm.documents import Document
+from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.views import View
 from bunnet.odm.union_doc import UnionDoc
 
-__version__ = "1.14.0"
+__version__ = "0.1.0"
 __all__ = [
     # ODM
     "Document",

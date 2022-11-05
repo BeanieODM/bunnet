@@ -41,6 +41,13 @@ from tests.models import (
     HouseWithRevision,
     WindowWithRevision,
     DocumentWithActions2,
+    Vehicle,
+    Bicycle,
+    Bike,
+    Car,
+    Bus,
+    TunedDocument,
+    Owner,
 )
 from tests.models import (
     Sample,
@@ -192,6 +199,13 @@ def init(db):
         HouseWithRevision,
         WindowWithRevision,
         DocumentWithActions2,
+        Vehicle,
+        Bicycle,
+        Bike,
+        Car,
+        Bus,
+        TunedDocument,
+        Owner,
     ]
     init_bunnet(
         database=db,

@@ -20,5 +20,7 @@ class ItemSettings(BaseModel):
 
     union_doc: Optional[Type] = None
 
+    is_root: bool = False
+
     class Config:
         arbitrary_types_allowed = True
