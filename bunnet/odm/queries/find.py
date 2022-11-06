@@ -137,7 +137,6 @@ class FindQuery(Generic[FindQueryResultType], UpdateMethods, SessionMethods):
         *args: Mapping[str, Any],
         on_insert: "DocType",
         session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
         **pymongo_kwargs,
     ):
         """
@@ -159,7 +158,6 @@ class FindQuery(Generic[FindQueryResultType], UpdateMethods, SessionMethods):
             .upsert(
                 *args,
                 on_insert=on_insert,
-                bulk_writer=bulk_writer,
                 **pymongo_kwargs,
             )
             .set_session(session=self.session)
@@ -821,6 +819,7 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
                         by_alias=True, exclude={"_id"}
                     ).encode(document),
                     object_class=self.document_model,
+                    pymongo_kwargs=self.pymongo_kwargs,
                 )
             )
             return None
