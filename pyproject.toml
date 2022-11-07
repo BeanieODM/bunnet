@@ -35,7 +35,7 @@ jinja2 = "3.0.3"
 fastapi = "^0.78.0"
 asgi-lifespan = "^1.0.1"
 httpx = "^0.23.0"
-Markdown = "3.3.6"
+Markdown = "3.3.5"
 importlib-metadata = "^4.12.0"
 
 
@@ -71,6 +71,9 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",
 ]
+
+[tool.poetry.scripts]
+bunnet = "bunnet.executors.migrate:migrations"
 
 [tool.mypy]
 ignore_missing_imports = true

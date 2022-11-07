@@ -1,3 +1,5 @@
+from bunnet.migrations.controllers.free_fall import free_fall_migration
+from bunnet.migrations.controllers.iterative import iterative_migration
 from bunnet.odm.actions import (
     before_event,
     after_event,
@@ -52,4 +54,7 @@ __all__ = [
     "Link",
     "WriteRules",
     "DeleteRules",
+    # Migrations
+    "iterative_migration",
+    "free_fall_migration",
 ]
