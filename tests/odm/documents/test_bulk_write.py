@@ -3,7 +3,7 @@ from pymongo.errors import BulkWriteError
 
 from bunnet.odm.bulk import BulkWriter
 from bunnet.odm.operators.update.general import Set
-from tests.models import DocumentTestModel
+from tests.models import DocumentTestModel, SubDocument
 
 
 def test_insert(documents_not_inserted):
@@ -93,93 +93,58 @@ def test_replace(documents, document_not_inserted):
     )
 
 
-def test_upsert_find_many_not_found(documents, document_not_inserted):
-    documents(5)
-    document_not_inserted.test_int = -10000
-    with BulkWriter() as bulk_writer:
-        DocumentTestModel.find(DocumentTestModel.test_int < -1000).upsert(
-            {"$set": {DocumentTestModel.test_int: 0}},
-            on_insert=document_not_inserted,
-        ).run()
-
-        bulk_writer.commit()
-
-    assert len(DocumentTestModel.find_all().to_list()) == 6
-    assert (
-        len(
-            DocumentTestModel.find(
-                DocumentTestModel.test_int == -10000
-            ).to_list()
-        )
-        == 1
-    )
-
-
-def test_upsert_find_one_not_found(documents, document_not_inserted):
-    documents(5)
-    document_not_inserted.test_int = -10000
-    with BulkWriter() as bulk_writer:
-        DocumentTestModel.find_one(DocumentTestModel.test_int < -1000).upsert(
-            {"$set": {DocumentTestModel.test_int: 0}},
-            on_insert=document_not_inserted,
-        ).run()
-
-        bulk_writer.commit()
-
-    assert len(DocumentTestModel.find_all().to_list()) == 6
-    assert (
-        len(
-            DocumentTestModel.find(
-                DocumentTestModel.test_int == -10000
-            ).to_list()
-        )
-        == 1
-    )
-
-
-def test_upsert_find_many_found(documents, document_not_inserted):
-    documents(5)
-    with BulkWriter() as bulk_writer:
-        DocumentTestModel.find(DocumentTestModel.test_int == 1).upsert(
-            {"$set": {DocumentTestModel.test_int: -10000}},
-            on_insert=document_not_inserted,
-        ).run()
-
-        bulk_writer.commit()
-
-    assert len(DocumentTestModel.find_all().to_list()) == 5
-    assert (
-        len(
-            DocumentTestModel.find(
-                DocumentTestModel.test_int == -10000
-            ).to_list()
-        )
-        == 1
-    )
-
-
-def test_upsert_find_one_found(documents, document_not_inserted):
-    documents(5)
-    with BulkWriter() as bulk_writer:
-        DocumentTestModel.find_one(DocumentTestModel.test_int == 1).upsert(
-            {"$set": {DocumentTestModel.test_int: -10000}},
-            on_insert=document_not_inserted,
-        ).run()
-
-        bulk_writer.commit()
-
-    assert len(DocumentTestModel.find_all().to_list()) == 5
-    assert (
-        len(
-            DocumentTestModel.find(
-                DocumentTestModel.test_int == -10000
-            ).to_list()
-        )
-        == 1
-    )
-
-
 def test_internal_error(document):
     with pytest.raises(BulkWriteError):
         with BulkWriter() as bulk_writer:
             DocumentTestModel.insert_one(document, bulk_writer=bulk_writer)
+
+
+def test_native_upsert_found(documents, document_not_inserted):
+    documents(5)
+    document_not_inserted.test_int = -1000
+    with BulkWriter() as bulk_writer:
+        DocumentTestModel.find_one(DocumentTestModel.test_int == 1).update_one(
+            {
+                "$addToSet": {
+                    "test_list": {
+                        "$each": [
+                            SubDocument(test_str="TEST_ONE"),
+                            SubDocument(test_str="TEST_TWO"),
+                        ]
+                    }
+                },
+                "$setOnInsert": {},
+            },
+            bulk_writer=bulk_writer,
+            upsert=True,
+        ).run()
+        bulk_writer.commit()
+
+    doc = DocumentTestModel.find_one(DocumentTestModel.test_int == 1).run()
+    assert len(doc.test_list) == 4
+
+
+def test_native_upsert_not_found(documents, document_not_inserted):
+    documents(5)
+    document_not_inserted.test_int = -1000
+    with BulkWriter() as bulk_writer:
+        DocumentTestModel.find_one(
+            DocumentTestModel.test_int == -1000
+        ).update_one(
+            {
+                "$addToSet": {
+                    "test_list": {
+                        "$each": [
+                            SubDocument(test_str="TEST_ONE"),
+                            SubDocument(test_str="TEST_TWO"),
+                        ]
+                    }
+                },
+                "$setOnInsert": {"TEST": "VALUE"},
+            },
+            bulk_writer=bulk_writer,
+            upsert=True,
+        ).run()
+        bulk_writer.commit()
+
+    assert DocumentTestModel.count() == 6
