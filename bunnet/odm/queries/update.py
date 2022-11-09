@@ -119,7 +119,7 @@ class UpdateQuery(UpdateMethods, SessionMethods, RunInterface):
 
     def run(
         self,
-    ) -> Union[UpdateResult, InsertOneResult]:
+    ) -> Union[UpdateResult, InsertOneResult, Optional["DocType"]]:
         """
         Run the query
         :return:

@@ -249,7 +249,7 @@ class Document(
         cls: Type[DocType],
         document: DocType,
         session: Optional[ClientSession] = None,
-        bulk_writer: "BulkWriter" = None,
+        bulk_writer: Optional["BulkWriter"] = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
     ) -> Optional[DocType]:
         """
@@ -943,17 +943,21 @@ class Document(
             if model_field.field_info.extra.get("hidden") is True
         )
 
-    def dict(
+    def dict(  # type: ignore
         self,
         *,
-        include: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
-        exclude: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
+        include: Optional[
+            Union["AbstractSetIntStr", "MappingIntStrAny"]
+        ] = None,
+        exclude: Optional[
+            Union["AbstractSetIntStr", "MappingIntStrAny"]
+        ] = None,
         by_alias: bool = False,
-        skip_defaults: bool = None,
-        exclude_hidden: bool = True,
+        skip_defaults: Optional[bool] = None,
         exclude_unset: bool = False,
         exclude_defaults: bool = False,
         exclude_none: bool = False,
+        exclude_hidden: bool = True,
     ) -> "DictStrAny":
         """
         Overriding of the respective method from Pydantic
