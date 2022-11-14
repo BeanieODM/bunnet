@@ -97,7 +97,7 @@ renderer:
         - title: On save validation
           source: docs/tutorial/on_save_validation.md
         - title: Migrations
-            source: docs/tutorial/migrations.md
+          source: docs/tutorial/migrations.md
     - title: API Documentation
       children:
         - title: Document
