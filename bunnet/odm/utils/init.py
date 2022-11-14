@@ -30,10 +30,10 @@ class Output(BaseModel):
 class Initializer:
     def __init__(
         self,
-        database: Database = None,
-        connection_string: str = None,
-        document_models: List[
-            Union[Type["DocType"], Type["View"], str]
+        database: Optional[Database] = None,
+        connection_string: Optional[str] = None,
+        document_models: Optional[
+            List[Union[Type["DocType"], Type["View"], str]]
         ] = None,
         allow_index_dropping: bool = False,
         recreate_views: bool = False,
@@ -67,7 +67,7 @@ class Initializer:
                 URL(connection_string).path[1:]
             ]
 
-        self.database: Database = database
+        self.database: Database = database  # type: ignore
 
         sort_order = {
             ModelType.UnionDoc: 0,
@@ -430,9 +430,11 @@ class Initializer:
 
 
 def init_bunnet(
-    database: Database = None,
-    connection_string: str = None,
-    document_models: List[Union[Type["DocType"], Type["View"], str]] = None,
+    database: Optional[Database] = None,
+    connection_string: Optional[str] = None,
+    document_models: Optional[
+        List[Union[Type["DocType"], Type["View"], str]]
+    ] = None,
     allow_index_dropping: bool = False,
     recreate_views: bool = False,
 ):
