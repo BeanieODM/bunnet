@@ -167,7 +167,8 @@ class MigrationNode:
         logger.info("Building migration list")
         names = []
         for modulepath in path.glob("*.py"):
-            names.append(modulepath.name)
+            if modulepath.name != "__init__.py":
+                names.append(modulepath.name)
         names.sort()
 
         db = DBHandler.get_db()

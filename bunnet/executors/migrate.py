@@ -163,7 +163,7 @@ def migrate(
 def new_migration(name, path):
     path = Path(path)
     ts_string = datetime.now().strftime("%Y%m%d%H%M%S")
-    file_name = f"{ts_string}_{name}.py"
+    file_name = f"migration_{ts_string}_{name}.py"
 
     shutil.copy(template.__file__, path / file_name)
 
