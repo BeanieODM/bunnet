@@ -2,7 +2,18 @@
 
 Bunnet project
 
-## [1.1.1] - 2022-11-07
+## [1.0.0] - 2022-11-14
+
+### Feature
+
+- Add migrations
+- Bunnet has nearly all the features that Beanie has
+
+### Implementation
+
+- PR <https://github.com/roman-right/bunnet/pull/4>
+
+## [0.1.1] - 2022-11-07
 
 ### Fix
 
@@ -23,3 +34,7 @@ Bunnet project
 - PR <https://github.com/roman-right/bunnet/pull/2>
 
 [0.1.0]: https://pypi.org/project/bunnet/0.1.0
+
+[0.1.1]: https://pypi.org/project/bunnet/0.1.0
+
+[1.0.0]: https://pypi.org/project/bunnet/1.0.0
