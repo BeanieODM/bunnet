@@ -2,6 +2,16 @@
 
 Bunnet project
 
+## [1.0.1] - 2022-11-18
+
+### Fix
+
+- Wrong inheritance behavior with non-rooted documents
+
+### Implementation
+
+- ISSUE <https://github.com/roman-right/beanie/issues/422>
+
 ## [1.0.0] - 2022-11-14
 
 ### Feature
@@ -38,3 +48,5 @@ Bunnet project
 [0.1.1]: https://pypi.org/project/bunnet/0.1.0
 
 [1.0.0]: https://pypi.org/project/bunnet/1.0.0
+
+[1.0.1]: https://pypi.org/project/bunnet/1.0.1

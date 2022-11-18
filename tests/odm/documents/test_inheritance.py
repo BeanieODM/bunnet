@@ -5,8 +5,9 @@ from tests.models import (
     Bike,
     Car,
     Bus,
-    TunedDocument,
     Owner,
+    TestNonRoot,
+    Test2NonRoot,
 )
 
 
@@ -51,7 +52,7 @@ class TestInheritance:
         assert isinstance(updated_bike, Bike)
         assert updated_bike.color == "yellow"
 
-        assert Vehicle._parent is TunedDocument
+        assert Car._parent is Vehicle
         assert Bus._parent is Car
 
         assert len(big_bicycles) == 1
@@ -97,3 +98,23 @@ class TestInheritance:
 
         for e in (owner, car_1, car_2, bus_1):
             e.delete()
+
+    def test_non_root_inheritance(self):
+        assert TestNonRoot._class_id is None
+        assert Test2NonRoot._class_id is None
+
+        assert TestNonRoot.get_collection_name() == "TestNonRoot"
+        assert Test2NonRoot.get_collection_name() == "Test2NonRoot"
+
+    def test_class_ids(self):
+        assert Vehicle._class_id == "Vehicle"
+        assert Vehicle.get_collection_name() == "Vehicle"
+        assert Car._class_id == "Vehicle.Car"
+        assert Car.get_collection_name() == "Vehicle"
+        assert Bus._class_id == "Vehicle.Car.Bus"
+        assert Bus.get_collection_name() == "Vehicle"
+        assert Bike._class_id == "Vehicle.Bike"
+        assert Bike.get_collection_name() == "Vehicle"
+        assert Bicycle._class_id == "Vehicle.Bicycle"
+        assert Bicycle.get_collection_name() == "Vehicle"
+        assert Owner._class_id is None

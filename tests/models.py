@@ -467,15 +467,8 @@ class HouseWithRevision(Document):
         use_state_management = True
 
 
-class TunedDocument(Document):
-    # some common settings for all models in the file
-    class Settings:
-        is_root = True
-        use_state_management = True
-
-
 # classes for inheritance test
-class Vehicle(TunedDocument):
+class Vehicle(Document):
     """Root parent for testing flat inheritance"""
 
     #               Vehicle
@@ -491,6 +484,10 @@ class Vehicle(TunedDocument):
     def on_object_create(self):
         # this event will be triggered for all children too (self will have corresponding type)
         ...
+
+    class Settings:
+        is_root = True
+        use_state_management = True
 
 
 class Bicycle(Vehicle):
@@ -519,3 +516,20 @@ class Bus(Car, Fuelled):
 class Owner(Document):
     name: str
     vehicles: List[Link[Vehicle]] = []
+
+
+class MixinNonRoot(BaseModel):
+    id: int = Field(..., ge=1, le=254)
+
+
+class MyDocNonRoot(Document):
+    class Settings:
+        use_state_management = True
+
+
+class TestNonRoot(MixinNonRoot, MyDocNonRoot):
+    name: str
+
+
+class Test2NonRoot(MyDocNonRoot):
+    name: str
