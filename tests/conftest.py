@@ -46,8 +46,9 @@ from tests.models import (
     Bike,
     Car,
     Bus,
-    TunedDocument,
     Owner,
+    TestNonRoot,
+    Test2NonRoot,
 )
 from tests.models import (
     Sample,
@@ -204,8 +205,9 @@ def init(db):
         Bike,
         Car,
         Bus,
-        TunedDocument,
         Owner,
+        TestNonRoot,
+        Test2NonRoot,
     ]
     init_bunnet(
         database=db,
