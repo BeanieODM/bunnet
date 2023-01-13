@@ -21,8 +21,8 @@ poetry add bunnet
 Getting Bunnet setup in your code is really easy:
 
 1.  Write your database model as a Pydantic class but use `bunnet.Document` instead of `pydantic.BaseModel`.
-2.  Initialize Motor, as Bunnet uses this as an async database engine under the hood.
-3.  Call `bunnet.init_bunnet` with the Motor client and list of Bunnet models
+2.  Initialize MongoClient, as Bunnet uses this as an database engine under the hood.
+3.  Call `bunnet.init_bunnet` with the PyMongo client and list of Bunnet models
 
 The code below should get you started and shows some of the field types that you can use with bunnet.
 
