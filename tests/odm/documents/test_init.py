@@ -1,11 +1,10 @@
 import pytest
-from yarl import URL
 
 from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.documents import Document
 from bunnet.exceptions import CollectionWasNotInitialized
 from bunnet.odm.utils.projection import get_projection
-from tests.models import (
+from tests.odm.models import (
     DocumentTestModel,
     DocumentTestModelWithCustomCollectionName,
     DocumentTestModelWithIndexFlagsAliases,
@@ -34,7 +33,7 @@ def test_init_connection_string(settings):
     )
     assert (
         NewDocumentCS.get_motor_collection().database.name
-        == URL(settings.mongodb_dsn).path[1:]
+        == settings.mongodb_dsn.split("/")[-1]
     )
 
 
@@ -184,7 +183,7 @@ def test_document_string_import(db):
     init_bunnet(
         database=db,
         document_models=[
-            "tests.models.DocumentTestModelStringImport",
+            "tests.odm.models.DocumentTestModelStringImport",
         ],
     )
     document = DocumentTestModelStringImport(test_int=1)

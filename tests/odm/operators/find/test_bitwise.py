@@ -4,7 +4,7 @@ from bunnet.odm.operators.find.bitwise import (
     BitsAnyClear,
     BitsAnySet,
 )
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_bits_all_clear():

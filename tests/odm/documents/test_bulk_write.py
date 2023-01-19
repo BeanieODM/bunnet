@@ -3,7 +3,7 @@ from pymongo.errors import BulkWriteError
 
 from bunnet.odm.bulk import BulkWriter
 from bunnet.odm.operators.update.general import Set
-from tests.models import DocumentTestModel, SubDocument
+from tests.odm.models import DocumentTestModel, SubDocument
 
 
 def test_insert(documents_not_inserted):

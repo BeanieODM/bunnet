@@ -1,5 +1,5 @@
 from bunnet import Link
-from tests.models import (
+from tests.odm.models import (
     Vehicle,
     Bicycle,
     Bike,
@@ -49,6 +49,7 @@ class TestInheritance:
         updated_bike = Vehicle.get(bike_1.id, with_children=True).run()
 
         assert isinstance(sedan, Car)
+
         assert isinstance(updated_bike, Bike)
         assert updated_bike.color == "yellow"
 

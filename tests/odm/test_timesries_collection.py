@@ -2,7 +2,7 @@ import pytest
 
 from bunnet import init_bunnet
 from bunnet.exceptions import MongoDBVersionError
-from tests.models import DocumentWithTimeseries
+from tests.odm.models import DocumentWithTimeseries
 
 
 def test_timeseries_collection(db):

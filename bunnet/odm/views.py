@@ -1,10 +1,8 @@
 from typing import ClassVar
 
 from pydantic import BaseModel
-from pymongo.database import Database
 
 from bunnet.exceptions import ViewWasNotInitialized
-from bunnet.odm.fields import ExpressionField
 from bunnet.odm.interfaces.aggregate import AggregateInterface
 from bunnet.odm.interfaces.detector import DetectionInterface, ModelType
 from bunnet.odm.interfaces.find import FindInterface
@@ -28,38 +26,6 @@ class View(
     """
 
     _settings: ClassVar[ViewSettings]
-
-    @classmethod
-    def init_view(cls, database, recreate_view: bool):
-        cls.init_settings(database)
-        cls.init_fields()
-
-        collection_names = database.list_collection_names()
-        if recreate_view or cls._settings.name not in collection_names:
-            if cls._settings.name in collection_names:
-                cls.get_motor_collection().drop()
-
-            database.command(
-                {
-                    "create": cls.get_settings().name,
-                    "viewOn": cls.get_settings().source,
-                    "pipeline": cls.get_settings().pipeline,
-                }
-            )
-
-    @classmethod
-    def init_settings(cls, database: Database) -> None:
-        cls._settings = ViewSettings.init(database=database, view_class=cls)
-
-    @classmethod
-    def init_fields(cls) -> None:
-        """
-        Init class fields
-        :return: None
-        """
-        for k, v in cls.__fields__.items():
-            path = v.alias or v.name
-            setattr(cls, k, ExpressionField(path))
 
     @classmethod
     def get_settings(cls) -> ViewSettings:

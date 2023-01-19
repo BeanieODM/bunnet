@@ -1,5 +1,5 @@
 from bunnet.odm.operators.update.bitwise import Bit
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_bit():

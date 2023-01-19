@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 from bunnet.odm.fields import PydanticObjectId
 from bunnet.odm.utils.dump import get_dict
 from bunnet.odm.utils.encoder import Encoder
-from tests.models import (
+from tests.odm.models import (
     DocumentWithCustomFiledsTypes,
     DocumentWithBsonEncodersFiledsTypes,
     DocumentTestModel,

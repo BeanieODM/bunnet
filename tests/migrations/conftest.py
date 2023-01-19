@@ -14,6 +14,6 @@ def init(db):
     )
 
 
-# @pytest.fixture(autouse=True)
-# def remove_migrations_log(db, init):
-#     MigrationLog.delete_all()
+@pytest.fixture(autouse=True)
+def remove_migrations_log(db, init):
+    MigrationLog.delete_all()

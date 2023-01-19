@@ -1,18 +1,18 @@
 import importlib
 import inspect
+from copy import copy
 from typing import Optional, List, Type, Union
 
 from pydantic import BaseModel
 from pymongo import IndexModel, MongoClient
 from pymongo.database import Database
-from yarl import URL
 
-from bunnet.exceptions import MongoDBVersionError
+from bunnet.exceptions import MongoDBVersionError, Deprecation
 from bunnet.odm.actions import ActionRegistry
 from bunnet.odm.cache import LRUCache
 from bunnet.odm.documents import DocType
 from bunnet.odm.documents import Document
-from bunnet.odm.fields import ExpressionField
+from bunnet.odm.fields import ExpressionField, LinkInfo
 from bunnet.odm.interfaces.detector import ModelType
 from bunnet.odm.settings.document import DocumentSettings
 from bunnet.odm.settings.union_doc import UnionDocSettings
@@ -63,9 +63,7 @@ class Initializer:
         if document_models is None:
             raise ValueError("document_models parameter must be set")
         if connection_string is not None:
-            database = MongoClient(connection_string)[
-                URL(connection_string).path[1:]
-            ]
+            database = MongoClient(connection_string).get_default_database()
 
         self.database: Database = database  # type: ignore
 
@@ -149,6 +147,7 @@ class Initializer:
         cls._parent = None
         cls._inheritance_inited = False
         cls._class_id = None
+        cls._link_fields = None
 
     @staticmethod
     def init_cache(cls) -> None:
@@ -168,6 +167,27 @@ class Initializer:
         Init class fields
         :return: None
         """
+        cls.update_forward_refs()
+
+        def check_nested_links(
+            link_info: LinkInfo, prev_models: List[Type[BaseModel]]
+        ):
+            if link_info.model_class in prev_models:
+                return
+            for k, v in link_info.model_class.__fields__.items():
+                nested_link_info = detect_link(v)
+                if nested_link_info is None:
+                    continue
+
+                if link_info.nested_links is None:
+                    link_info.nested_links = {}
+                link_info.nested_links[v.name] = nested_link_info
+                new_prev_models = copy(prev_models)
+                new_prev_models.append(link_info.model_class)
+                check_nested_links(
+                    nested_link_info, prev_models=new_prev_models
+                )
+
         if cls._link_fields is None:
             cls._link_fields = {}
         for k, v in cls.__fields__.items():
@@ -177,6 +197,7 @@ class Initializer:
             link_info = detect_link(v)
             if link_info is not None:
                 cls._link_fields[v.name] = link_info
+                check_nested_links(link_info, prev_models=[])
 
         cls._hidden_fields = cls.get_hidden_fields()
 
@@ -219,12 +240,11 @@ class Initializer:
         if not document_settings.name:
             document_settings.name = cls.__name__
 
-        # check mongodb version
-        build_info = self.database.command({"buildInfo": 1})
-        mongo_version = build_info["version"]
-        major_version = int(mongo_version.split(".")[0])
-
-        if document_settings.timeseries is not None and major_version < 5:
+        # check mongodb version fits
+        if (
+            document_settings.timeseries is not None
+            and cls._database_major_version < 5
+        ):
             raise MongoDBVersionError(
                 "Timeseries are supported by MongoDB version 5 and higher"
             )
@@ -296,6 +316,11 @@ class Initializer:
         if cls is Document:
             return None
 
+        # get db version
+        build_info = self.database.command({"buildInfo": 1})
+        mongo_version = build_info["version"]
+        cls._database_major_version = int(mongo_version.split(".")[0])
+
         if cls not in self.inited_classes:
             self.set_default_class_vars(cls)
             self.init_settings(cls)
@@ -331,6 +356,7 @@ class Initializer:
             self.init_actions(cls)
 
             self.inited_classes.append(cls)
+
             return output
 
         else:
@@ -413,6 +439,19 @@ class Initializer:
         cls._settings.motor_collection = self.database[cls._settings.name]
         cls._is_inited = True
 
+    # Deprecations
+
+    @staticmethod
+    def check_deprecations(
+        cls: Union[Type[Document], Type[View], Type[UnionDoc]]
+    ):
+        if hasattr(cls, "Collection"):
+            raise Deprecation(
+                "Collection inner class is not supported more. "
+                "Please use Settings instead. "
+                "https://roman-right.github.io/bunnet/tutorial/defining-a-document/#settings"
+            )
+
     # Final
 
     def init_class(
@@ -424,6 +463,8 @@ class Initializer:
         :param cls:
         :return:
         """
+        self.check_deprecations(cls)
+
         if issubclass(cls, Document):
             self.init_document(cls)
 

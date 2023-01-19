@@ -1,4 +1,4 @@
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_sum(preset_documents, session):

@@ -8,7 +8,7 @@ from bunnet.odm.operators.find.comparison import (
     NE,
     NotIn,
 )
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_eq():

@@ -1,4 +1,5 @@
 import datetime
+import decimal
 from decimal import Decimal
 from ipaddress import (
     IPv4Address,
@@ -9,29 +10,25 @@ from ipaddress import (
     IPv6Network,
 )
 from pathlib import Path
-from typing import List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import UUID, uuid4
 
 import pymongo
-from pydantic import SecretBytes, SecretStr, Extra, PrivateAttr
+from pydantic import (
+    BaseModel,
+    Extra,
+    Field,
+    PrivateAttr,
+    SecretBytes,
+    SecretStr,
+    condecimal,
+)
 from pydantic.color import Color
-from pydantic import BaseModel, Field
 from pymongo import IndexModel
 
-from bunnet import Indexed
-from bunnet.odm.documents import Document
-from bunnet.odm.actions import (
-    before_event,
-    after_event,
-)
-from bunnet.odm.actions import (
-    Delete,
-    Insert,
-    Replace,
-    Update,
-    ValidateOnSave,
-)
-from bunnet.odm.fields import Link
+from bunnet import Document, Indexed, Insert, Replace, Update, ValidateOnSave
+from bunnet.odm.actions import Delete, after_event, before_event
+from bunnet.odm.fields import Link, PydanticObjectId
 from bunnet.odm.settings.timeseries import TimeSeriesConfig
 from bunnet.odm.union_doc import UnionDoc
 
@@ -66,6 +63,7 @@ class Sample(Document):
     optional: Optional[Option2]
     union: Union[Option1, Option2]
     geo: GeoObject
+    const: str = "TEST"
 
 
 class SubDocument(BaseModel):
@@ -93,9 +91,6 @@ class DocumentTestModelWithCustomCollectionName(Document):
 
     class Settings:
         name = "custom"
-
-    # class Settings:
-    #     name = "custom"
 
 
 class DocumentTestModelWithSimpleIndex(Document):
@@ -134,20 +129,6 @@ class DocumentTestModelWithComplexIndex(Document):
                 name="test_string_index_DESCENDING",
             ),
         ]
-
-    # class Settings:
-    #     name = "docs_with_index"
-    #     indexes = [
-    #         "test_int",
-    #         [
-    #             ("test_int", pymongo.ASCENDING),
-    #             ("test_str", pymongo.DESCENDING),
-    #         ],
-    #         IndexModel(
-    #             [("test_str", pymongo.DESCENDING)],
-    #             name="test_string_index_DESCENDING",
-    #         ),
-    #     ]
 
 
 class DocumentTestModelWithDroppedIndex(Document):
@@ -333,6 +314,16 @@ class DocumentWithTurnedOnReplaceObjects(Document):
         state_management_replace_objects = True
 
 
+class DocumentWithTurnedOnSavePrevious(Document):
+    num_1: int
+    num_2: int
+    internal: InternalDoc
+
+    class Settings:
+        use_state_management = True
+        state_management_save_previous = True
+
+
 class DocumentWithTurnedOffStateManagement(Document):
     num_1: int
     num_2: int
@@ -378,13 +369,25 @@ class DocumentWithExtrasKw(Document, extra=Extra.allow):
     num_1: int
 
 
+class Yard(Document):
+    v: int
+    w: int
+
+
+class Lock(Document):
+    k: int
+
+
 class Window(Document):
     x: int
     y: int
+    lock: Optional[Link[Lock]]
 
 
 class Door(Document):
     t: int = 10
+    window: Optional[Link[Window]]
+    locks: Optional[List[Link[Lock]]]
 
 
 class Roof(Document):
@@ -395,6 +398,7 @@ class House(Document):
     windows: List[Link[Window]]
     door: Link[Door]
     roof: Optional[Link[Roof]]
+    yards: Optional[List[Link[Yard]]]
     name: Indexed(str) = Field(hidden=True)
     height: Indexed(int) = 2
 
@@ -450,9 +454,27 @@ class DocumentMultiModelTwo(Document):
         union_doc = DocumentUnion
 
 
+class YardWithRevision(Document):
+    v: int
+    w: int
+
+    class Settings:
+        use_revision = True
+        use_state_management = True
+
+
+class LockWithRevision(Document):
+    k: int
+
+    class Settings:
+        use_revision = True
+        use_state_management = True
+
+
 class WindowWithRevision(Document):
     x: int
     y: int
+    lock: Link[LockWithRevision]
 
     class Settings:
         use_revision = True
@@ -487,7 +509,6 @@ class Vehicle(Document):
 
     class Settings:
         is_root = True
-        use_state_management = True
 
 
 class Bicycle(Vehicle):
@@ -533,3 +554,111 @@ class TestNonRoot(MixinNonRoot, MyDocNonRoot):
 
 class Test2NonRoot(MyDocNonRoot):
     name: str
+
+
+class Child(BaseModel):
+    child_field: str
+
+
+class SampleWithMutableObjects(Document):
+    d: Dict[str, Child]
+    lst: List[Child]
+
+
+class SampleLazyParsing(Document):
+    i: int
+    s: str
+    lst: List[int] = Field(
+        [],
+    )
+
+    class Settings:
+        lazy_parsing = True
+        use_state_management = True
+
+    class Config:
+        validate_assignment = True
+
+
+class RootDocument(Document):
+    name: str
+    link_root: Link[Document]
+
+
+class ADocument(RootDocument):
+    surname: str
+    link_a: Link[Document]
+
+    class Settings:
+        name = "B"
+
+
+class BDocument(RootDocument):
+    email: str
+    link_b: Link[Document]
+
+    class Settings:
+        name = "B"
+
+
+class StateAndDecimalFieldModel(Document):
+    amt: decimal.Decimal
+    other_amt: condecimal(
+        decimal_places=1, multiple_of=decimal.Decimal("0.5")
+    ) = 0
+
+    class Settings:
+        name = "amounts"
+        use_revision = True
+        use_state_management = True
+
+
+class Region(Document):
+    state: Optional[str] = "TEST"
+    city: Optional[str] = "TEST"
+    district: Optional[str] = "TEST"
+
+
+class UsersAddresses(Document):
+    region_id: Optional[Link[Region]]
+    phone_number: Optional[str] = None
+    street: Optional[str] = None
+
+
+class AddressView(BaseModel):
+    id: Optional[PydanticObjectId] = Field(alias="_id")
+    phone_number: Optional[str]
+    street: Optional[str]
+    state: Optional[str]
+    city: Optional[str]
+    district: Optional[str]
+
+    class Settings:
+        projection = {
+            "id": "$_id",
+            "phone_number": 1,
+            "street": 1,
+            "sub_district": "$region_id.sub_district",
+            "city": "$region_id.city",
+            "state": "$region_id.state",
+        }
+
+
+class SelfLinked(Document):
+    item: Optional[Link["SelfLinked"]]
+    s: str
+
+
+class LoopedLinksA(Document):
+    b: "LoopedLinksB"
+
+
+class LoopedLinksB(Document):
+    a: Optional[LoopedLinksA]
+
+
+class DocWithCollectionInnerClass(Document):
+    s: str
+
+    class Collection:
+        name = "test"

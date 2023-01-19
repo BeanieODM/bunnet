@@ -2,6 +2,7 @@ from abc import abstractmethod
 
 
 from bunnet.odm.bulk import BulkWriter, Operation
+from bunnet.odm.interfaces.clone import CloneInterface
 from bunnet.odm.interfaces.run import RunInterface
 from bunnet.odm.utils.encoder import Encoder
 from typing import (
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from bunnet.odm.documents import DocType
 
 
-class UpdateQuery(UpdateMethods, SessionMethods, RunInterface):
+class UpdateQuery(UpdateMethods, SessionMethods, RunInterface, CloneInterface):
     """
     Update Query base class
 

@@ -1,7 +1,7 @@
 from pydantic import Field
 from pydantic.main import BaseModel
 
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_aggregate(documents):

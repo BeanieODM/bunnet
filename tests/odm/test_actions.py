@@ -2,7 +2,7 @@ import pytest
 
 from bunnet import Before, After
 
-from tests.models import (
+from tests.odm.models import (
     DocumentWithActions,
     InheritedDocumentWithActions,
     DocumentWithActions2,

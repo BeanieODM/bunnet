@@ -1,6 +1,6 @@
 from bunnet.odm.operators.update.general import Max
 from bunnet.odm.queries.update import UpdateQuery, UpdateMany
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_set(session):

@@ -1,5 +1,5 @@
 from bunnet.odm.views import View
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 class TestView(View):

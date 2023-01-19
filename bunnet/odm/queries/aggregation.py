@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pymongo.command_cursor import CommandCursor
 
 from bunnet.odm.cache import LRUCache
+from bunnet.odm.interfaces.clone import CloneInterface
 from bunnet.odm.interfaces.session import SessionMethods
 from bunnet.odm.queries.cursor import BaseCursorQuery
 from bunnet.odm.utils.projection import get_projection
@@ -27,6 +28,7 @@ class AggregationQuery(
     Generic[AggregationProjectionType],
     BaseCursorQuery[AggregationProjectionType],
     SessionMethods,
+    CloneInterface,
 ):
     """
     Aggregation Query

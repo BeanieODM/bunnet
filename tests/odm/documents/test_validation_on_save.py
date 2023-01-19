@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from tests.models import DocumentWithValidationOnSave
+from tests.odm.models import DocumentWithValidationOnSave
 
 
 def test_validate_on_insert():

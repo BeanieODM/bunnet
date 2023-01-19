@@ -4,7 +4,7 @@ from bunnet.odm.operators.find.geospatial import (
     Near,
     NearSphere,
 )
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_geo_intersects():

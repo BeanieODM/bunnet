@@ -1,7 +1,7 @@
 import pytest
 
 from bunnet.exceptions import RevisionIdWasChanged
-from tests.models import DocumentWithRevisionTurnedOn
+from tests.odm.models import DocumentWithRevisionTurnedOn
 
 
 def test_replace():

@@ -24,6 +24,5 @@ class OtherGettersInterface:
         return cls.get_settings().bson_encoders
 
     @classmethod
-    @abstractmethod
     def get_link_fields(cls):
         return None

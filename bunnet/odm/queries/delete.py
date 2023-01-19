@@ -11,6 +11,7 @@ from typing import (
 from pymongo.results import DeleteResult
 
 from bunnet.odm.bulk import BulkWriter, Operation
+from bunnet.odm.interfaces.clone import CloneInterface
 from bunnet.odm.interfaces.run import RunInterface
 from bunnet.odm.interfaces.session import SessionMethods
 from pymongo import DeleteOne as DeleteOnePyMongo
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from bunnet.odm.documents import DocType
 
 
-class DeleteQuery(SessionMethods, RunInterface):
+class DeleteQuery(SessionMethods, RunInterface, CloneInterface):
     """
     Deletion Query
     """

@@ -2,6 +2,23 @@
 
 Bunnet project
 
+## [1.1.0] - 2023-01-19
+
+### Sync
+
+- Beanie version: 1.16.8
+
+### Features
+
+- Previous saved state
+- Remove yarl dependency
+- Support for fetching deep-nested Links
+- Lazy parsing for find many
+
+### Implementation
+
+- ISSUE <https://github.com/roman-right/beanie/issues/422>
+
 ## [1.0.1] - 2022-11-18
 
 ### Fix
@@ -50,3 +67,5 @@ Bunnet project
 [1.0.0]: https://pypi.org/project/bunnet/1.0.0
 
 [1.0.1]: https://pypi.org/project/bunnet/1.0.1
+
+[1.1.0]: https://pypi.org/project/bunnet/1.1.0
