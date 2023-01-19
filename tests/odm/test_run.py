@@ -1,5 +1,5 @@
 from bunnet import PydanticObjectId
-from tests.models import DocumentTestModel, Sample
+from tests.odm.models import DocumentTestModel, Sample
 
 
 class TestRun:

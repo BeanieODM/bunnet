@@ -3,7 +3,7 @@ from time import sleep
 import pytest
 
 from bunnet.odm.operators.update.general import Set, Max
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_update_query():
@@ -208,4 +208,15 @@ def test_update_pymongo_kwargs(preset_documents):
 
     Sample.find_one(Sample.increment > 4).update(
         Set({Sample.increment: 100}), hint="integer_1"
-    ).run()
+    )
+
+
+def test_clone():
+    q = Sample.find_many(Sample.integer == 1).update(Set({Sample.integer: 10}))
+    new_q = q.clone()
+    new_q.update(Max({Sample.integer: 10}))
+    assert q.update_query == {"$set": {"integer": 10}}
+    assert new_q.update_query == {
+        "$max": {"integer": 10},
+        "$set": {"integer": 10},
+    }

@@ -2,7 +2,7 @@ import pytest
 from pymongo.errors import DuplicateKeyError
 
 from bunnet.odm.fields import PydanticObjectId
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_insert_one(document_not_inserted):

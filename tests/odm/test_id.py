@@ -1,9 +1,6 @@
 from uuid import UUID
 
-from tests.models import (
-    DocumentWithCustomIdUUID,
-    DocumentWithCustomIdInt,
-)
+from tests.odm.models import DocumentWithCustomIdUUID, DocumentWithCustomIdInt
 
 
 def test_uuid_id():

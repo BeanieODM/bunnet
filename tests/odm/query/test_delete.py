@@ -1,5 +1,5 @@
 import pytest
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_delete_many(preset_documents):

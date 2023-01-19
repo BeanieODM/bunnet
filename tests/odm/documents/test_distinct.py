@@ -1,4 +1,4 @@
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_distinct_unique(documents, document_not_inserted):

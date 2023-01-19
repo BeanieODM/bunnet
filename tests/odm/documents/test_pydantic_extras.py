@@ -1,6 +1,6 @@
 import pytest
 
-from tests.models import (
+from tests.odm.models import (
     DocumentWithExtras,
     DocumentWithPydanticConfig,
     DocumentWithExtrasKw,

@@ -16,8 +16,10 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.7,<4.0"
 pydantic = ">=1.9.0"
-yarl = ">=1.6"
 pymongo ="*"
+lazy-model = ">=0.0.3"
+click = ">=7"
+toml = "*"
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.3.0"
@@ -83,4 +85,47 @@ module = "toml"
 ignore_missing_imports = true
 
 [tool.pyright]
-include = ["tests/typing", "bunnet"]
+include = ["tests/typing", "beanie"]
+
+[tool.ruff]
+line-length = 79
+
+# Enable Pyflakes `E` and `F` codes by default.
+select = ["E", "F"]
+ignore = ["E501"]
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Assume Python 3.10.
+target-version = "py310"
+
+[tool.ruff.per-file-ignores]
+"tests/*" = ["E711"]
+
+[tool.ruff.mccabe]
+# Unlike Flake8, default to a complexity level of 10.
+max-complexity = 10

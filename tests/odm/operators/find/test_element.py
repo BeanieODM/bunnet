@@ -1,5 +1,5 @@
 from bunnet.odm.operators.find.element import Exists, Type
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_exists():

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Generic, TypeVar, Union, Type, List
+from typing import Generic, TypeVar, Union, Type, List, Optional, Dict
 
 from bson import ObjectId, DBRef
 from bson.errors import InvalidId
@@ -93,6 +93,8 @@ class ExpressionField(str):
         return hash(str(self))
 
     def __eq__(self, other):
+        if isinstance(other, ExpressionField):
+            return super(ExpressionField, self).__eq__(other)
         return Eq(field=self, other=other)
 
     def __gt__(self, other):
@@ -144,6 +146,7 @@ class LinkInfo(BaseModel):
     field: str
     model_class: Type[BaseModel]  # Document class
     link_type: LinkTypes
+    nested_links: Optional[Dict]
 
 
 T = TypeVar("T")
@@ -154,8 +157,8 @@ class Link(Generic[T]):
         self.ref = ref
         self.model_class = model_class
 
-    def fetch(self) -> Union[T, "Link"]:
-        result = self.model_class.get(self.ref.id, with_children=True).run()  # type: ignore
+    def fetch(self, fetch_links: bool = False) -> Union[T, "Link"]:
+        result = self.model_class.get(self.ref.id, with_children=True, fetch_links=fetch_links).run()  # type: ignore
         return result or self
 
     @classmethod
@@ -163,7 +166,7 @@ class Link(Generic[T]):
         return link.fetch()
 
     @classmethod
-    def fetch_list(cls, links: List["Link"]):
+    def fetch_list(cls, links: List["Link"], fetch_links: bool = False):
         ids = []
         model_class = None
         for link in links:
@@ -175,7 +178,7 @@ class Link(Generic[T]):
                         "All the links must have the same model class"
                     )
             ids.append(link.ref.id)
-        return model_class.find(In("_id", ids), with_children=True).to_list()  # type: ignore
+        return model_class.find(In("_id", ids), with_children=True, fetch_links=fetch_links).to_list()  # type: ignore
 
     @classmethod
     def fetch_many(cls, links: List["Link"]):

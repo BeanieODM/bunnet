@@ -1,4 +1,4 @@
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_count(documents):

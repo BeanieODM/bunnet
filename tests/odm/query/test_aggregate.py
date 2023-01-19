@@ -3,7 +3,7 @@ from pydantic import Field
 from pydantic.main import BaseModel
 from pymongo.errors import OperationFailure
 
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_aggregate(preset_documents):
@@ -91,8 +91,19 @@ def test_aggregate_pymongo_kwargs(preset_documents):
             wrong=True,
         ).to_list()
 
-    # with pytest.raises(TypeError):
-    #     Sample.find(Sample.increment >= 4).aggregate(
-    #         [{"$group": {"_id": "$string", "total": {"$sum": "$integer"}}}],
-    #         hint="integer_1",
-    #     ).to_list()
+
+def test_clone(preset_documents):
+    q = Sample.find(Sample.increment >= 4).aggregate(
+        [{"$group": {"_id": "$string", "total": {"$sum": "$integer"}}}]
+    )
+    new_q = q.clone()
+    new_q.aggregation_pipeline.append({"a": "b"})
+    assert q.get_aggregation_pipeline() == [
+        {"$match": {"increment": {"$gte": 4}}},
+        {"$group": {"_id": "$string", "total": {"$sum": "$integer"}}},
+    ]
+    assert new_q.get_aggregation_pipeline() == [
+        {"$match": {"increment": {"$gte": 4}}},
+        {"$group": {"_id": "$string", "total": {"$sum": "$integer"}}},
+        {"a": "b"},
+    ]

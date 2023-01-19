@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from tests.models import DocumentWithPydanticConfig
+from tests.odm.models import DocumentWithPydanticConfig
 
 
 def test_pydantic_config():

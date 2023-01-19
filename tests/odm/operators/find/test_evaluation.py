@@ -6,7 +6,7 @@ from bunnet.odm.operators.find.evaluation import (
     Text,
     Where,
 )
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_expr():

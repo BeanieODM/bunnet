@@ -1,6 +1,6 @@
 from bunnet.odm.enums import SortDirection
 from bunnet.odm.operators.find.comparison import In, NotIn
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_nesting():

@@ -1,6 +1,6 @@
 from time import sleep
 
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_find_one(documents):

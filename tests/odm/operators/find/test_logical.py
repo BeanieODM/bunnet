@@ -1,5 +1,5 @@
 from bunnet.odm.operators.find.logical import And, Not, Nor, Or
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_and():

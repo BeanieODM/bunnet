@@ -1,5 +1,5 @@
 from bunnet.odm.models import InspectionStatuses
-from tests.models import (
+from tests.odm.models import (
     DocumentTestModel,
     DocumentTestModelFailInspection,
 )

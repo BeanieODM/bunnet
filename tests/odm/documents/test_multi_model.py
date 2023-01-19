@@ -1,4 +1,4 @@
-from tests.models import (
+from tests.odm.models import (
     DocumentMultiModelOne,
     DocumentMultiModelTwo,
     DocumentUnion,

@@ -1,5 +1,5 @@
 from bunnet.odm.operators.find.array import All, ElemMatch, Size
-from tests.models import Sample
+from tests.odm.models import Sample
 
 
 def test_all():

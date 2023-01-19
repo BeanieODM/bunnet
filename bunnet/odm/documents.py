@@ -1,4 +1,3 @@
-import inspect
 from typing import ClassVar, AbstractSet
 from typing import (
     Dict,
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from bson import ObjectId, DBRef
+from lazy_model import LazyModel
 from pydantic import (
     ValidationError,
     PrivateAttr,
@@ -24,7 +24,6 @@ from pydantic import (
 from pydantic.main import BaseModel
 from pymongo import InsertOne
 from pymongo.client_session import ClientSession
-from pymongo.database import Database
 from pymongo.results import (
     DeleteResult,
     InsertManyResult,
@@ -49,7 +48,6 @@ from bunnet.exceptions import (
 from bunnet.odm.actions import (
     EventTypes,
     wrap_with_actions,
-    ActionRegistry,
     ActionDirections,
 )
 from bunnet.odm.bulk import BulkWriter, Operation
@@ -78,12 +76,12 @@ from bunnet.odm.queries.update import UpdateMany
 
 from bunnet.odm.settings.document import DocumentSettings
 from bunnet.odm.utils.dump import get_dict
-from bunnet.odm.utils.relations import detect_link
 from bunnet.odm.utils.self_validation import validate_self_before
 from bunnet.odm.utils.state import (
     save_state_after,
     swap_revision_after,
     saved_state_needed,
+    previous_saved_state_needed,
 )
 
 if TYPE_CHECKING:
@@ -95,7 +93,7 @@ DocumentProjectionType = TypeVar("DocumentProjectionType", bound=BaseModel)
 
 
 class Document(
-    BaseModel,
+    LazyModel,
     SettersInterface,
     InheritanceInterface,
     FindInterface,
@@ -122,6 +120,7 @@ class Document(
     revision_id: Optional[UUID] = Field(default=None, hidden=True)
     _previous_revision_id: Optional[UUID] = PrivateAttr(default=None)
     _saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
+    _previous_saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
 
     # Relations
     _link_fields: ClassVar[Optional[Dict[str, LinkInfo]]] = None
@@ -131,6 +130,9 @@ class Document(
 
     # Settings
     _document_settings: ClassVar[Optional[DocumentSettings]] = None
+
+    # Database
+    _database_major_version: ClassVar[int] = 4
 
     # Other
     _hidden_fields: ClassVar[Set[str]] = set()
@@ -170,6 +172,7 @@ class Document(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        with_children: bool = False,
         **pymongo_kwargs,
     ) -> "FindOne[DocType]":
         """
@@ -188,6 +191,7 @@ class Document(
             session=session,
             ignore_cache=ignore_cache,
             fetch_links=fetch_links,
+            with_children=with_children,
             **pymongo_kwargs,
         )
 
@@ -224,7 +228,7 @@ class Document(
                         if isinstance(value, List):
                             for obj in value:
                                 if isinstance(obj, Document):
-                                    obj.insert(link_rule=WriteRules.WRITE)
+                                    obj.save(link_rule=WriteRules.WRITE)
         result = self.get_motor_collection().insert_one(
             get_dict(self, to_db=True), session=session
         )
@@ -729,6 +733,14 @@ class Document(
         return cls.get_settings().use_state_management
 
     @classmethod
+    def state_management_save_previous(cls) -> bool:
+        """
+        Should we save the previous state after a commit to database
+        :return: bool
+        """
+        return cls.get_settings().state_management_save_previous
+
+    @classmethod
     def state_management_replace_objects(cls) -> bool:
         """
         Should objects be replaced when using state management
@@ -742,6 +754,9 @@ class Document(
         :return: None
         """
         if self.use_state_management() and self.id is not None:
+            if self.state_management_save_previous():
+                self._previous_saved_state = self._saved_state
+
             self._saved_state = get_dict(self)
 
     def get_saved_state(self) -> Optional[Dict[str, Any]]:
@@ -751,10 +766,28 @@ class Document(
         """
         return self._saved_state
 
+    def get_previous_saved_state(self) -> Optional[Dict[str, Any]]:
+        """
+        Previous state getter. It is a protected property.
+        :return: Optional[Dict[str, Any]] - previous state
+        """
+        return self._previous_saved_state
+
     @property  # type: ignore
     @saved_state_needed
     def is_changed(self) -> bool:
         if self._saved_state == get_dict(self, to_db=True):
+            return False
+        return True
+
+    @property  # type: ignore
+    @saved_state_needed
+    @previous_saved_state_needed
+    def has_changed(self) -> bool:
+        if (
+            self._previous_saved_state is None
+            or self._previous_saved_state == self._saved_state
+        ):
             return False
         return True
 
@@ -803,6 +836,16 @@ class Document(
         )
 
     @saved_state_needed
+    @previous_saved_state_needed
+    def get_previous_changes(self) -> Dict[str, Any]:
+        if self._previous_saved_state is None:
+            return {}
+
+        return self._collect_updates(
+            self._previous_saved_state, self._saved_state  # type: ignore
+        )
+
+    @saved_state_needed
     def rollback(self) -> None:
         if self.is_changed:
             for key, value in self._saved_state.items():  # type: ignore
@@ -810,90 +853,6 @@ class Document(
                     setattr(self, "id", value)
                 else:
                     setattr(self, key, value)
-
-    # Initialization
-
-    @classmethod
-    def init_cache(cls) -> None:
-        """
-        Init model's cache
-        :return: None
-        """
-        if cls.get_settings().use_cache:
-            cls._cache = LRUCache(
-                capacity=cls.get_settings().cache_capacity,
-                expiration_time=cls.get_settings().cache_expiration_time,
-            )
-
-    @classmethod
-    def init_fields(cls) -> None:
-        """
-        Init class fields
-        :return: None
-        """
-        if cls._link_fields is None:
-            cls._link_fields = {}
-        for k, v in cls.__fields__.items():
-            path = v.alias or v.name
-            setattr(cls, k, ExpressionField(path))
-
-            link_info = detect_link(v)
-            if link_info is not None:
-                cls._link_fields[v.name] = link_info
-
-        cls._hidden_fields = cls.get_hidden_fields()
-
-    @classmethod
-    def init_settings(
-        cls, database: Database, allow_index_dropping: bool
-    ) -> None:
-        """
-        Init document settings (collection and models)
-
-        :param database: Database - pymongo database
-        :param allow_index_dropping: bool
-        :return: None
-        """
-        # TODO looks ugly a little. Too many parameters transfers.
-        cls._document_settings = DocumentSettings.init(
-            database=database,
-            document_model=cls,
-            allow_index_dropping=allow_index_dropping,
-        )
-
-    @classmethod
-    def init_actions(cls):
-        """
-        Init event-based actions
-        """
-        ActionRegistry.clean_actions(cls)
-        for attr in dir(cls):
-            f = getattr(cls, attr)
-            if inspect.isfunction(f):
-                if hasattr(f, "has_action"):
-                    ActionRegistry.add_action(
-                        document_class=cls,
-                        event_types=f.event_types,  # type: ignore
-                        action_direction=f.action_direction,  # type: ignore
-                        funct=f,
-                    )
-
-    @classmethod
-    def init_model(
-        cls, database: Database, allow_index_dropping: bool
-    ) -> None:
-        """
-        Init wrapper
-        :param database: Database
-        :param allow_index_dropping: bool
-        :return: None
-        """
-        cls.init_settings(
-            database=database, allow_index_dropping=allow_index_dropping
-        )
-        cls.init_fields()
-        cls.init_cache()
-        cls.init_actions()
 
     # Other
 
@@ -972,15 +931,21 @@ class Document(
                 )  # type: ignore
             elif exclude is None:
                 exclude = self._hidden_fields
-        return super().dict(
-            include=include,
-            exclude=exclude,
-            by_alias=by_alias,
-            skip_defaults=skip_defaults,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-        )
+
+        kwargs = {
+            "include": include,
+            "exclude": exclude,
+            "by_alias": by_alias,
+            "exclude_unset": exclude_unset,
+            "exclude_defaults": exclude_defaults,
+            "exclude_none": exclude_none,
+        }
+
+        # TODO: Remove this check when skip_defaults are no longer supported
+        if skip_defaults:
+            kwargs["skip_defaults"] = skip_defaults
+
+        return super().dict(**kwargs)
 
     @wrap_with_actions(event_type=EventTypes.VALIDATE_ON_SAVE)
     def validate_self(self, *args, **kwargs):
@@ -996,10 +961,10 @@ class Document(
     def fetch_link(self, field: Union[str, Any]):
         ref_obj = getattr(self, field, None)
         if isinstance(ref_obj, Link):
-            value = ref_obj.fetch()
+            value = ref_obj.fetch(fetch_links=True)
             setattr(self, field, value)
         if isinstance(ref_obj, list) and ref_obj:
-            values = Link.fetch_list(ref_obj)
+            values = Link.fetch_list(ref_obj, fetch_links=True)
             setattr(self, field, values)
 
     def fetch_all_links(self):

@@ -3,9 +3,11 @@ from datetime import datetime, date
 from bson import Binary
 
 from bunnet.odm.utils.encoder import Encoder
-from tests.models import (
+from tests.odm.models import (
     DocumentForEncodingTest,
     DocumentForEncodingTestDate,
+    SampleWithMutableObjects,
+    Child,
 )
 
 
@@ -50,3 +52,12 @@ def test_bytes_already_binary():
     encoded_b = Encoder().encode(b)
     assert isinstance(encoded_b, Binary)
     assert encoded_b.subtype == 3
+
+
+def test_mutable_objects_on_save():
+    instance = SampleWithMutableObjects(
+        d={"Bar": Child(child_field="Foo")}, lst=[Child(child_field="Bar")]
+    )
+    instance.save()
+    assert isinstance(instance.d["Bar"], Child)
+    assert isinstance(instance.lst[0], Child)

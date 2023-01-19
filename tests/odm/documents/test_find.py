@@ -1,7 +1,7 @@
 import pymongo
 
 from bunnet.odm.fields import PydanticObjectId
-from tests.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel
 
 
 def test_get(document):

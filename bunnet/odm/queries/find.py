@@ -26,6 +26,7 @@ from bunnet.odm.cache import LRUCache
 from bunnet.odm.bulk import BulkWriter, Operation
 from bunnet.odm.enums import SortDirection
 from bunnet.odm.interfaces.aggregation_methods import AggregateMethods
+from bunnet.odm.interfaces.clone import CloneInterface
 from bunnet.odm.interfaces.run import RunInterface
 from bunnet.odm.interfaces.session import SessionMethods
 from bunnet.odm.interfaces.update import UpdateMethods
@@ -41,6 +42,7 @@ from bunnet.odm.queries.update import (
     UpdateMany,
     UpdateOne,
 )
+from bunnet.odm.utils.dump import get_dict
 from bunnet.odm.utils.encoder import Encoder
 from bunnet.odm.utils.find import construct_lookup_queries
 from bunnet.odm.utils.parsing import parse_obj
@@ -54,7 +56,9 @@ FindQueryProjectionType = TypeVar("FindQueryProjectionType", bound=BaseModel)
 FindQueryResultType = TypeVar("FindQueryResultType", bound=BaseModel)
 
 
-class FindQuery(Generic[FindQueryResultType], UpdateMethods, SessionMethods):
+class FindQuery(
+    Generic[FindQueryResultType], UpdateMethods, SessionMethods, CloneInterface
+):
     """
     Find Query base class
 
@@ -82,6 +86,7 @@ class FindQuery(Generic[FindQueryResultType], UpdateMethods, SessionMethods):
         self.encoders = self.document_model.get_bson_encoders()
         self.fetch_links: bool = False
         self.pymongo_kwargs: Dict[str, Any] = {}
+        self.lazy_parse = False
 
     def prepare_find_expressions(self):
         if self.document_model.get_link_fields() is not None:
@@ -250,6 +255,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> "FindMany[FindQueryResultType]":
         ...
@@ -265,6 +271,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> "FindMany[FindQueryProjectionType]":
         ...
@@ -279,6 +286,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> Union[
         "FindMany[FindQueryResultType]", "FindMany[FindQueryProjectionType]"
@@ -307,6 +315,8 @@ class FindMany(
         self.ignore_cache = ignore_cache
         self.fetch_links = fetch_links
         self.pymongo_kwargs.update(pymongo_kwargs)
+        if lazy_parse is True:
+            self.lazy_parse = lazy_parse
         return self
 
     # TODO probably merge FindOne and FindMany to one class to avoid this
@@ -352,6 +362,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> "FindMany[FindQueryResultType]":
         ...
@@ -367,6 +378,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> "FindMany[FindQueryProjectionType]":
         ...
@@ -381,6 +393,7 @@ class FindMany(
         session: Optional[ClientSession] = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
+        lazy_parse: bool = False,
         **pymongo_kwargs,
     ) -> Union[
         "FindMany[FindQueryResultType]", "FindMany[FindQueryProjectionType]"
@@ -397,6 +410,7 @@ class FindMany(
             session=session,
             ignore_cache=ignore_cache,
             fetch_links=fetch_links,
+            lazy_parse=lazy_parse,
             **pymongo_kwargs,
         )
 
@@ -802,7 +816,7 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
             result: UpdateResult = (
                 self.document_model.get_motor_collection().replace_one(
                     self.get_filter_query(),
-                    Encoder(by_alias=True, exclude={"_id"}).encode(document),
+                    get_dict(document, to_db=True, exclude={"_id"}),
                     session=self.session,
                 )
             )
@@ -826,16 +840,13 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
 
     def _find_one(self):
         if self.fetch_links:
-            result = self.document_model.find(
+            return self.document_model.find(
                 *self.find_expressions,
                 session=self.session,
                 fetch_links=self.fetch_links,
+                projection_model=self.projection_model,
                 **self.pymongo_kwargs,
-            ).to_list(length=1)
-            if result:
-                return result[0]
-            else:
-                return None
+            ).first_or_none()
         return self.document_model.get_motor_collection().find_one(
             filter=self.get_filter_query(),
             projection=get_projection(self.projection_model),
@@ -873,6 +884,8 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
             document = self._find_one()  # type: ignore
         if document is None:
             return None
+        if type(document) == self.projection_model:
+            return cast(FindQueryResultType, document)
         return cast(
             FindQueryResultType, parse_obj(self.projection_model, document)
         )
