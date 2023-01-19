@@ -7,7 +7,7 @@ from tests.fastapi.models import HouseAPI, WindowAPI, DoorAPI, RoofAPI
 
 
 @pytest.fixture(autouse=True)
-def api_client(clean_db):
+async def api_client(clean_db, loop):
     """api client fixture."""
     async with LifespanManager(app, startup_timeout=100, shutdown_timeout=100):
         server_name = "https://localhost"
@@ -16,7 +16,7 @@ def api_client(clean_db):
 
 
 @pytest.fixture(autouse=True)
-def clean_db(loop, db):
+def clean_db(db):
     models = [HouseAPI, WindowAPI, DoorAPI, RoofAPI]
     yield None
 

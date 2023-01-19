@@ -1,4 +1,5 @@
-import motor.motor_asyncio
+from pymongo import MongoClient
+
 from bunnet import init_bunnet
 from fastapi import FastAPI
 
@@ -12,7 +13,7 @@ app = FastAPI()
 @app.on_event("startup")
 def app_init():
     # CREATE MOTOR CLIENT
-    client = motor.motor_asyncio.AsyncIOMotorClient(Settings().mongodb_dsn)
+    client = MongoClient(Settings().mongodb_dsn)
 
     # INIT BEANIE
     init_bunnet(
