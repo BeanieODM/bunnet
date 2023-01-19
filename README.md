@@ -86,7 +86,7 @@ product.set({Product.name:"Gold bar"})
   project
 - **[Changelog](https://roman-right.github.io/bunnet/changelog)** - list of all
   the valuable changes
-- **[Discord](https://discord.gg/ZTTnM7rMaz)** - ask your questions, share
+- **[Discord](https://discord.gg/29mMrEBvr4)** - ask your questions, share
   ideas or just say `Hello!!`
 
 ----
