@@ -27,6 +27,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    HttpUrl,
     PrivateAttr,
     SecretBytes,
     SecretStr,
@@ -506,6 +507,15 @@ class Window(Document):
     x: int
     y: int
     lock: Optional[Link[Lock]] = None
+
+
+class WindowWithValidationOnSave(Document):
+    x: int
+    y: int
+    lock: Optional[Link[Lock]] = None
+
+    class Settings:
+        validate_on_save = True
 
 
 class Door(Document):
@@ -1023,3 +1033,7 @@ class DocWithCallWrapper(Document):
         @validate_call
         def foo(self, bar: str) -> None:
             print(f"foo {bar}")
+
+
+class DocumentWithHttpUrlField(Document):
+    url_field: HttpUrl

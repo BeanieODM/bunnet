@@ -129,6 +129,7 @@ The inner class `Settings` is used to configure:
 - Use of cache
 - Use of state management
 - Validation on save
+- Configure if nulls should be saved to the database
 
 ### Collection name
 
@@ -231,3 +232,19 @@ class Sample(Document):
           IPv4Address: ipv4address_to_int
         }
 ```
+
+### Keep nulls
+
+By default, Bunnet saves fields with `None` value as `null` in the database.
+
+But if you don't want to save `null` values, you can set `keep_nulls` to `False` in the `Settings` class:
+
+```python
+class Sample(Document):
+    num: int
+    description: Optional[str] = None
+
+    class Settings:
+        keep_nulls = False
+```
+
