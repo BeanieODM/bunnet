@@ -7,11 +7,11 @@ from tests.fastapi.models import DoorAPI, HouseAPI, RoofAPI, WindowAPI
 
 
 @pytest.fixture(autouse=True)
-def api_client(clean_db, loop):
+async def api_client(clean_db):
     """api client fixture."""
-    with LifespanManager(app, startup_timeout=100, shutdown_timeout=100):
+    async with LifespanManager(app, startup_timeout=100, shutdown_timeout=100):
         server_name = "https://localhost"
-        with AsyncClient(app=app, base_url=server_name) as ac:
+        async with AsyncClient(app=app, base_url=server_name) as ac:
             yield ac
 
 

@@ -10,7 +10,7 @@ app = FastAPI()
 
 
 @app.on_event("startup")
-def app_init():
+async def app_init():
     # CREATE MOTOR CLIENT
     client = MongoClient(Settings().mongodb_dsn)
 
