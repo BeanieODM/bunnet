@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from tests.typing.models import Test, ProjectionTest
+from tests.typing.models import ProjectionTest, Test
 
 
 def find_many() -> List[Test]:

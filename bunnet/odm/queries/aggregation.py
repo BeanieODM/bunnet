@@ -1,11 +1,11 @@
 from typing import (
-    Type,
-    List,
-    Mapping,
-    Optional,
     TYPE_CHECKING,
     Any,
     Generic,
+    List,
+    Mapping,
+    Optional,
+    Type,
     TypeVar,
 )
 
@@ -32,11 +32,6 @@ class AggregationQuery(
 ):
     """
     Aggregation Query
-
-    Inherited from:
-
-    - [SessionMethods](https://roman-right.github.io/bunnet/api/interfaces/#sessionmethods) - session methods
-    - [BaseCursorQuery](https://roman-right.github.io/bunnet/api/queries/#basecursorquery) - generator
     """
 
     def __init__(
@@ -46,7 +41,7 @@ class AggregationQuery(
         find_query: Mapping[str, Any],
         projection_model: Optional[Type[BaseModel]] = None,
         ignore_cache: bool = False,
-        **pymongo_kwargs
+        **pymongo_kwargs,
     ):
         self.aggregation_pipeline: List[
             Mapping[str, Any]

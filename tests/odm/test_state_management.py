@@ -3,51 +3,63 @@ from bson import ObjectId
 
 from bunnet import PydanticObjectId, WriteRules
 from bunnet.exceptions import StateManagementIsTurnedOff, StateNotSaved
+from bunnet.odm.utils.parsing import parse_obj
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 from tests.odm.models import (
     DocumentWithTurnedOffStateManagement,
     DocumentWithTurnedOnReplaceObjects,
-    DocumentWithTurnedOnStateManagement,
     DocumentWithTurnedOnSavePrevious,
+    DocumentWithTurnedOnStateManagement,
+    DocumentWithTurnedOnStateManagementWithCustomId,
     HouseWithRevision,
     InternalDoc,
     LockWithRevision,
-    WindowWithRevision,
     StateAndDecimalFieldModel,
+    WindowWithRevision,
 )
 
 
 @pytest.fixture
 def state():
+    if IS_PYDANTIC_V2:
+        internal = InternalDoc().model_dump()
+    else:
+        internal = InternalDoc().dict()
     return {
         "num_1": 1,
         "num_2": 2,
         "_id": ObjectId(),
-        "internal": InternalDoc(),
+        "internal": internal,
     }
 
 
 @pytest.fixture
 def state_without_id():
+    if IS_PYDANTIC_V2:
+        internal = InternalDoc().model_dump()
+    else:
+        internal = InternalDoc().dict()
+
     return {
         "num_1": 1,
         "num_2": 2,
-        "internal": InternalDoc(),
+        "internal": internal,
     }
 
 
 @pytest.fixture
 def doc_default(state):
-    return DocumentWithTurnedOnStateManagement.parse_obj(state)
+    return parse_obj(DocumentWithTurnedOnStateManagement, state)
 
 
 @pytest.fixture
 def doc_replace(state):
-    return DocumentWithTurnedOnReplaceObjects.parse_obj(state)
+    return parse_obj(DocumentWithTurnedOnReplaceObjects, state)
 
 
 @pytest.fixture
 def doc_previous(state):
-    return DocumentWithTurnedOnSavePrevious.parse_obj(state)
+    return parse_obj(DocumentWithTurnedOnSavePrevious, state)
 
 
 @pytest.fixture
@@ -97,13 +109,17 @@ class TestStateManagement:
         StateAndDecimalFieldModel.all().to_list()
 
     def test_parse_object_with_saving_state(self):
+        if IS_PYDANTIC_V2:
+            internal = InternalDoc().model_dump()
+        else:
+            internal = InternalDoc().dict()
         obj = {
             "num_1": 1,
             "num_2": 2,
             "_id": ObjectId(),
-            "internal": InternalDoc(),
+            "internal": internal,
         }
-        doc = DocumentWithTurnedOnStateManagement.parse_obj(obj)
+        doc = parse_obj(DocumentWithTurnedOnStateManagement, obj)
         assert doc.get_saved_state() == obj
         assert doc.get_previous_saved_state() is None
 
@@ -135,6 +151,18 @@ class TestStateManagement:
                 "_id": doc.id,
             }
             assert doc.get_previous_saved_state() is None
+
+        def test_save_state_with_custom_id_type(self):
+            doc = DocumentWithTurnedOnStateManagementWithCustomId(
+                id=0,
+                num_1=1,
+                num_2=2,
+            )
+            with pytest.raises(StateNotSaved):
+                doc.save_changes()
+            doc.num_1 = 2
+            with pytest.raises(StateNotSaved):
+                doc.save_changes()
 
         def test_save_state_with_previous(self):
             doc = DocumentWithTurnedOnSavePrevious(

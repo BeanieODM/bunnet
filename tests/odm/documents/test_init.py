@@ -1,18 +1,22 @@
 import pytest
+from pymongo import IndexModel
 
-from bunnet.odm.utils.init import init_bunnet
-from bunnet.odm.documents import Document
+from bunnet import Indexed
 from bunnet.exceptions import CollectionWasNotInitialized
+from bunnet.odm.documents import Document
+from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.utils.projection import get_projection
 from tests.odm.models import (
     DocumentTestModel,
+    DocumentTestModelStringImport,
+    DocumentTestModelWithComplexIndex,
     DocumentTestModelWithCustomCollectionName,
+    DocumentTestModelWithDroppedIndex,
+    DocumentTestModelWithIndexFlags,
     DocumentTestModelWithIndexFlagsAliases,
     DocumentTestModelWithSimpleIndex,
-    DocumentTestModelWithIndexFlags,
-    DocumentTestModelWithComplexIndex,
-    DocumentTestModelStringImport,
-    DocumentTestModelWithDroppedIndex,
+    DocumentWithCustomInit,
+    DocumentWithIndexMerging2,
 )
 
 
@@ -218,3 +222,56 @@ def test_projection():
         "test_doc": 1,
         "revision_id": 1,
     }
+
+
+def test_index_recreation(db):
+    class Sample1(Document):
+        name: Indexed(str, unique=True)
+
+        class Settings:
+            name = "sample"
+
+    class Sample2(Document):
+        name: str
+        status: str = "active"
+
+        class Settings:
+            indexes = [
+                IndexModel(
+                    "name",
+                    unique=True,
+                    partialFilterExpression={"is_active": {"$eq": "active"}},
+                ),
+            ]
+            name = "sample"
+
+    db.drop_collection("sample")
+
+    init_bunnet(
+        database=db,
+        document_models=[Sample1],
+    )
+
+    init_bunnet(
+        database=db, document_models=[Sample2], allow_index_dropping=True
+    )
+
+    db.drop_collection("sample")
+
+
+def test_merge_indexes():
+    assert (
+        DocumentWithIndexMerging2.get_motor_collection().index_information()
+        == {
+            "_id_": {"key": [("_id", 1)], "v": 2},
+            "s0_1": {"key": [("s0", 1)], "v": 2},
+            "s1_1": {"key": [("s1", 1)], "v": 2},
+            "s2_-1": {"key": [("s2", -1)], "v": 2},
+            "s3_index": {"key": [("s3", -1)], "v": 2},
+            "s4_index": {"key": [("s4", 1)], "v": 2},
+        }
+    )
+
+
+def test_custom_init():
+    assert DocumentWithCustomInit.s == "TEST2"

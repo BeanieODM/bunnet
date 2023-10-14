@@ -1,24 +1,52 @@
+import sys
+
+from pymongo.database import Database
+
+from bunnet.odm.utils.pydantic import (
+    IS_PYDANTIC_V2,
+    get_extra_field_info,
+    get_field_type,
+    get_model_fields,
+    parse_model,
+)
+
+if sys.version_info >= (3, 8):
+    from typing import get_args, get_origin
+else:
+    from typing_extensions import get_args, get_origin
+
 import importlib
 import inspect
 from copy import copy
-from typing import Optional, List, Type, Union
+from typing import (  # type: ignore
+    List,
+    Optional,
+    Type,
+    Union,
+    _GenericAlias,
+)
 
 from pydantic import BaseModel
+from pydantic.fields import FieldInfo
 from pymongo import IndexModel, MongoClient
-from pymongo.database import Database
 
-from bunnet.exceptions import MongoDBVersionError, Deprecation
+from bunnet.exceptions import Deprecation, MongoDBVersionError
 from bunnet.odm.actions import ActionRegistry
 from bunnet.odm.cache import LRUCache
-from bunnet.odm.documents import DocType
-from bunnet.odm.documents import Document
-from bunnet.odm.fields import ExpressionField, LinkInfo
+from bunnet.odm.documents import DocType, Document
+from bunnet.odm.fields import (
+    BackLink,
+    ExpressionField,
+    Link,
+    LinkInfo,
+    LinkTypes,
+)
 from bunnet.odm.interfaces.detector import ModelType
-from bunnet.odm.settings.document import DocumentSettings
+from bunnet.odm.registry import DocsRegistry
+from bunnet.odm.settings.document import DocumentSettings, IndexModelField
 from bunnet.odm.settings.union_doc import UnionDocSettings
 from bunnet.odm.settings.view import ViewSettings
 from bunnet.odm.union_doc import UnionDoc
-from bunnet.odm.utils.relations import detect_link
 from bunnet.odm.views import View
 
 
@@ -53,6 +81,8 @@ class Initializer:
         self.allow_index_dropping = allow_index_dropping
         self.recreate_views = recreate_views
 
+        self.models_with_updated_forward_refs: List[Type[BaseModel]] = []
+
         if (connection_string is None and database is None) or (
             connection_string is not None and database is not None
         ):
@@ -78,6 +108,8 @@ class Initializer:
             for model in document_models
         ]
 
+        self.fill_docs_registry()
+
         self.document_models.sort(
             key=lambda val: sort_order[val.get_model_type()]
         )
@@ -87,6 +119,13 @@ class Initializer:
             self.init_class(model)
 
     # General
+    def fill_docs_registry(self):
+        for model in self.document_models:
+            module = inspect.getmodule(model)
+            members = inspect.getmembers(module)
+            for name, obj in members:
+                if inspect.isclass(obj) and issubclass(obj, BaseModel):
+                    DocsRegistry.register(name, obj)
 
     @staticmethod
     def get_model(dot_path: str) -> Type["DocType"]:
@@ -126,11 +165,142 @@ class Initializer:
             {} if settings_class is None else dict(vars(settings_class))
         )
         if issubclass(cls, Document):
-            cls._document_settings = DocumentSettings.parse_obj(settings_vars)
+            cls._document_settings = parse_model(
+                DocumentSettings, settings_vars
+            )
         if issubclass(cls, View):
-            cls._settings = ViewSettings.parse_obj(settings_vars)
+            cls._settings = parse_model(ViewSettings, settings_vars)
         if issubclass(cls, UnionDoc):
-            cls._settings = UnionDocSettings.parse_obj(settings_vars)
+            cls._settings = parse_model(UnionDocSettings, settings_vars)
+
+    if not IS_PYDANTIC_V2:
+
+        def update_forward_refs(self, cls: Type[BaseModel]):
+            """
+            Update forward refs
+
+            :param cls: Type[BaseModel] - class to update forward refs
+            :return: None
+            """
+            if cls not in self.models_with_updated_forward_refs:
+                cls.update_forward_refs()
+                self.models_with_updated_forward_refs.append(cls)
+
+    # General. Relations
+
+    def detect_link(
+        self, field: FieldInfo, field_name: str
+    ) -> Optional[LinkInfo]:
+        """
+        It detects link and returns LinkInfo if any found.
+
+        :param field: ModelField
+        :return: Optional[LinkInfo]
+        """
+
+        origin = get_origin(field.annotation)
+        args = get_args(field.annotation)
+        classes = [
+            Link,
+            BackLink,
+        ]
+
+        for cls in classes:
+            # Check if annotation is one of the custom classes
+            if (
+                isinstance(field.annotation, _GenericAlias)
+                and field.annotation.__origin__ is cls
+            ):
+                if cls is Link:
+                    return LinkInfo(
+                        field_name=field_name,
+                        lookup_field_name=field_name,
+                        document_class=DocsRegistry.evaluate_fr(args[0]),  # type: ignore
+                        link_type=LinkTypes.DIRECT,
+                    )
+                if cls is BackLink:
+                    return LinkInfo(
+                        field_name=field_name,
+                        lookup_field_name=get_extra_field_info(
+                            field, "original_field"
+                        ),  # type: ignore
+                        document_class=DocsRegistry.evaluate_fr(args[0]),  # type: ignore
+                        link_type=LinkTypes.BACK_DIRECT,
+                    )
+
+            # Check if annotation is List[custom class]
+            elif (
+                (origin is List or origin is list)
+                and len(args) == 1
+                and isinstance(args[0], _GenericAlias)
+                and args[0].__origin__ is cls
+            ):
+                if cls is Link:
+                    return LinkInfo(
+                        field_name=field_name,
+                        lookup_field_name=field_name,
+                        document_class=DocsRegistry.evaluate_fr(get_args(args[0])[0]),  # type: ignore
+                        link_type=LinkTypes.LIST,
+                    )
+                if cls is BackLink:
+                    return LinkInfo(
+                        field_name=field_name,
+                        lookup_field_name=get_extra_field_info(  # type: ignore
+                            field, "original_field"
+                        ),
+                        document_class=DocsRegistry.evaluate_fr(get_args(args[0])[0]),  # type: ignore
+                        link_type=LinkTypes.BACK_LIST,
+                    )
+
+            # Check if annotation is Optional[custom class] or Optional[List[custom class]]
+            elif origin is Union and len(args) == 2 and args[1] is type(None):
+                optional_origin = get_origin(args[0])
+                optional_args = get_args(args[0])
+
+                if (
+                    isinstance(args[0], _GenericAlias)
+                    and args[0].__origin__ is cls
+                ):
+                    if cls is Link:
+                        return LinkInfo(
+                            field_name=field_name,
+                            lookup_field_name=field_name,
+                            document_class=DocsRegistry.evaluate_fr(optional_args[0]),  # type: ignore
+                            link_type=LinkTypes.OPTIONAL_DIRECT,
+                        )
+                    if cls is BackLink:
+                        return LinkInfo(
+                            field_name=field_name,
+                            lookup_field_name=get_extra_field_info(
+                                field, "original_field"
+                            ),
+                            document_class=DocsRegistry.evaluate_fr(optional_args[0]),  # type: ignore
+                            link_type=LinkTypes.OPTIONAL_BACK_DIRECT,
+                        )
+
+                elif (
+                    (optional_origin is List or optional_origin is list)
+                    and len(optional_args) == 1
+                    and isinstance(optional_args[0], _GenericAlias)
+                    and optional_args[0].__origin__ is cls
+                ):
+                    if cls is Link:
+                        return LinkInfo(
+                            field_name=field_name,
+                            lookup_field_name=field_name,
+                            document_class=DocsRegistry.evaluate_fr(get_args(optional_args[0])[0]),  # type: ignore
+                            link_type=LinkTypes.OPTIONAL_LIST,
+                        )
+                    if cls is BackLink:
+                        return LinkInfo(
+                            field_name=field_name,
+                            lookup_field_name=get_extra_field_info(
+                                field, "original_field"
+                            ),
+                            document_class=DocsRegistry.evaluate_fr(get_args(optional_args[0])[0]),  # type: ignore
+                            link_type=LinkTypes.OPTIONAL_BACK_LIST,
+                        )
+        return None
 
     # Document
 
@@ -161,42 +331,45 @@ class Initializer:
                 expiration_time=cls.get_settings().cache_expiration_time,
             )
 
-    @staticmethod
-    def init_document_fields(cls) -> None:
+    def init_document_fields(self, cls) -> None:
         """
         Init class fields
         :return: None
         """
-        cls.update_forward_refs()
+
+        if not IS_PYDANTIC_V2:
+            self.update_forward_refs(cls)
 
         def check_nested_links(
             link_info: LinkInfo, prev_models: List[Type[BaseModel]]
         ):
-            if link_info.model_class in prev_models:
+            if link_info.document_class in prev_models:
                 return
-            for k, v in link_info.model_class.__fields__.items():
-                nested_link_info = detect_link(v)
+            if not IS_PYDANTIC_V2:
+                self.update_forward_refs(link_info.document_class)
+            for k, v in get_model_fields(link_info.document_class).items():
+                nested_link_info = self.detect_link(v, k)
                 if nested_link_info is None:
                     continue
 
                 if link_info.nested_links is None:
                     link_info.nested_links = {}
-                link_info.nested_links[v.name] = nested_link_info
+                link_info.nested_links[k] = nested_link_info
                 new_prev_models = copy(prev_models)
-                new_prev_models.append(link_info.model_class)
+                new_prev_models.append(link_info.document_class)
                 check_nested_links(
                     nested_link_info, prev_models=new_prev_models
                 )
 
         if cls._link_fields is None:
             cls._link_fields = {}
-        for k, v in cls.__fields__.items():
-            path = v.alias or v.name
+        for k, v in get_model_fields(cls).items():
+            path = v.alias or k
             setattr(cls, k, ExpressionField(path))
 
-            link_info = detect_link(v)
+            link_info = self.detect_link(v, k)
             if link_info is not None:
-                cls._link_fields[v.name] = link_info
+                cls._link_fields[k] = link_info
                 check_nested_links(link_info, prev_models=[])
 
         cls._hidden_fields = cls.get_hidden_fields()
@@ -231,9 +404,11 @@ class Initializer:
         # register in the Union Doc
 
         if document_settings.union_doc is not None:
+            name = cls.get_settings().name or cls.__name__
             document_settings.name = document_settings.union_doc.register_doc(
-                cls
+                name, cls
             )
+            document_settings.union_doc_alias = name
 
         # set a name
 
@@ -253,9 +428,10 @@ class Initializer:
         if (
             document_settings.timeseries is not None
             and document_settings.name
-            not in self.database.list_collection_names()
+            not in self.database.list_collection_names(
+                authorizedCollections=True, nameOnly=True
+            )
         ):
-
             collection = self.database.create_collection(
                 **document_settings.timeseries.build_query(
                     document_settings.name
@@ -266,45 +442,76 @@ class Initializer:
 
         cls.set_collection(collection)
 
-    @staticmethod
-    def init_indexes(cls, allow_index_dropping: bool = False):
+    def init_indexes(self, cls, allow_index_dropping: bool = False):
         """
         Async indexes initializer
         """
         collection = cls.get_motor_collection()
         document_settings = cls.get_settings()
 
-        old_indexes = collection.index_information().keys()
-        new_indexes = ["_id_"]
+        index_information = collection.index_information()
+
+        old_indexes = IndexModelField.from_motor_index_information(
+            index_information
+        )
+        new_indexes = []
 
         # Indexed field wrapped with Indexed()
         found_indexes = [
-            IndexModel(
-                [
-                    (
-                        fvalue.alias,
-                        fvalue.type_._indexed[0],
-                    )
-                ],
-                **fvalue.type_._indexed[1],
+            IndexModelField(
+                IndexModel(
+                    [
+                        (
+                            fvalue.alias or k,
+                            fvalue.annotation._indexed[0],
+                        )
+                    ],
+                    **fvalue.annotation._indexed[1],
+                )
             )
-            for _, fvalue in cls.__fields__.items()
-            if hasattr(fvalue.type_, "_indexed") and fvalue.type_._indexed
+            for k, fvalue in get_model_fields(cls).items()
+            if hasattr(get_field_type(fvalue), "_indexed")
+            and get_field_type(fvalue)._indexed
         ]
 
-        # get indexes from the Collection class
-        if document_settings.indexes:
-            found_indexes += document_settings.indexes
+        if document_settings.merge_indexes:
+            result: List[IndexModelField] = []
+            for subclass in reversed(cls.mro()):
+                if issubclass(subclass, Document) and not subclass == Document:
+                    if (
+                        subclass not in self.inited_classes
+                        and not subclass == cls
+                    ):
+                        self.init_class(subclass)
+                    if subclass.get_settings().indexes:
+                        result = IndexModelField.merge_indexes(
+                            result, subclass.get_settings().indexes
+                        )
+            found_indexes = IndexModelField.merge_indexes(
+                found_indexes, result
+            )
 
-        # create indices
-        if found_indexes:
-            new_indexes += collection.create_indexes(found_indexes)
+        else:
+            if document_settings.indexes:
+                found_indexes = IndexModelField.merge_indexes(
+                    found_indexes, document_settings.indexes
+                )
+
+        new_indexes += found_indexes
 
         # delete indexes
         # Only drop indexes if the user specifically allows for it
         if allow_index_dropping:
-            for index in set(old_indexes) - set(new_indexes):
-                collection.drop_index(index)
+            for index in IndexModelField.list_difference(
+                old_indexes, new_indexes
+            ):
+                collection.drop_index(index.name)
+
+        # create indices
+        if found_indexes:
+            new_indexes += collection.create_indexes(
+                IndexModelField.list_to_index_model(new_indexes)
+            )
 
     def init_document(self, cls: Type[Document]) -> Optional[Output]:
         """
@@ -320,7 +527,6 @@ class Initializer:
         build_info = self.database.command({"buildInfo": 1})
         mongo_version = build_info["version"]
         cls._database_major_version = int(mongo_version.split(".")[0])
-
         if cls not in self.inited_classes:
             self.set_default_class_vars(cls)
             self.init_settings(cls)
@@ -370,15 +576,41 @@ class Initializer:
 
     # Views
 
-    @staticmethod
-    def init_view_fields(cls) -> None:
+    def init_view_fields(self, cls) -> None:
         """
         Init class fields
         :return: None
         """
-        for k, v in cls.__fields__.items():
-            path = v.alias or v.name
+
+        def check_nested_links(
+            link_info: LinkInfo, prev_models: List[Type[BaseModel]]
+        ):
+            if link_info.document_class in prev_models:
+                return
+            for k, v in get_model_fields(link_info.document_class).items():
+                nested_link_info = self.detect_link(v, k)
+                if nested_link_info is None:
+                    continue
+
+                if link_info.nested_links is None:
+                    link_info.nested_links = {}
+                link_info.nested_links[k] = nested_link_info
+                new_prev_models = copy(prev_models)
+                new_prev_models.append(link_info.document_class)
+                check_nested_links(
+                    nested_link_info, prev_models=new_prev_models
+                )
+
+        if cls._link_fields is None:
+            cls._link_fields = {}
+        for k, v in get_model_fields(cls).items():
+            path = v.alias or k
             setattr(cls, k, ExpressionField(path))
+
+            link_info = self.detect_link(v, k)
+            if link_info is not None:
+                cls._link_fields[k] = link_info
+                check_nested_links(link_info, prev_models=[])
 
     def init_view_collection(self, cls):
         """
@@ -408,8 +640,11 @@ class Initializer:
         self.init_settings(cls)
         self.init_view_collection(cls)
         self.init_view_fields(cls)
+        self.init_cache(cls)
 
-        collection_names = self.database.list_collection_names()
+        collection_names = self.database.list_collection_names(
+            authorizedCollections=True, nameOnly=True
+        )
         if self.recreate_views or cls._settings.name not in collection_names:
             if cls._settings.name in collection_names:
                 cls.get_motor_collection().drop()
@@ -473,6 +708,9 @@ class Initializer:
 
         if issubclass(cls, UnionDoc):
             self.init_union_doc(cls)
+
+        if hasattr(cls, "custom_init"):
+            cls.custom_init()  # type: ignore
 
 
 def init_bunnet(

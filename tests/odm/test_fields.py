@@ -1,17 +1,21 @@
 import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Mapping, AbstractSet
+from typing import AbstractSet, Mapping
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from bunnet import Document
+from bunnet.exceptions import CollectionWasNotInitialized
 from bunnet.odm.fields import PydanticObjectId
 from bunnet.odm.utils.dump import get_dict
 from bunnet.odm.utils.encoder import Encoder
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 from tests.odm.models import (
-    DocumentWithCustomFiledsTypes,
-    DocumentWithBsonEncodersFiledsTypes,
     DocumentTestModel,
+    DocumentWithBsonEncodersFiledsTypes,
+    DocumentWithCustomFiledsTypes,
     Sample,
 )
 
@@ -104,15 +108,39 @@ def test_custom_filed_types():
 
 def test_hidden(document):
     document = DocumentTestModel.find_one().run()
+    if IS_PYDANTIC_V2:
+        assert "test_list" not in document.model_dump()
+    else:
+        assert "test_list" not in document.dict()
 
-    assert "test_list" not in document.dict()
+
+def test_revision_id_not_in_schema():
+    """Check if there is a `revision_id` slipping into the schema."""
+
+    class Foo(Document):
+        """Dummy document."""
+
+        bar: int = 3
+
+    if IS_PYDANTIC_V2:
+        schema = Foo.model_json_schema()
+    else:
+        schema = Foo.schema()
+    assert "revision_id" not in schema["properties"]
+
+    # check that the document has not been initialized,
+    # as otherwise the `revision_id` is normally gone from the schema.
+    with pytest.raises(CollectionWasNotInitialized):
+        Foo.get_settings()
 
 
 @pytest.mark.parametrize("exclude", [{"test_int"}, {"test_doc": {"test_int"}}])
 def test_param_exclude(document, exclude):
     document = DocumentTestModel.find_one().run()
-
-    doc_dict = document.dict(exclude=exclude)
+    if IS_PYDANTIC_V2:
+        doc_dict = document.model_dump(exclude=exclude)
+    else:
+        doc_dict = document.dict(exclude=exclude)
     if isinstance(exclude, AbstractSet):
         for k in exclude:
             assert k not in doc_dict

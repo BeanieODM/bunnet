@@ -1,11 +1,11 @@
 from bunnet.odm.operators.find.comparison import (
-    Eq,
     GT,
     GTE,
-    In,
     LT,
     LTE,
     NE,
+    Eq,
+    In,
     NotIn,
 )
 from tests.odm.models import Sample

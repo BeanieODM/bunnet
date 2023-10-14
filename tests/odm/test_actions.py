@@ -1,11 +1,10 @@
 import pytest
 
-from bunnet import Before, After
-
+from bunnet import After, Before
 from tests.odm.models import (
     DocumentWithActions,
-    InheritedDocumentWithActions,
     DocumentWithActions2,
+    InheritedDocumentWithActions,
 )
 
 
@@ -113,17 +112,30 @@ class TestActions:
     def test_actions_update(self, doc_class):
         test_name = f"test_actions_update_{doc_class}"
         sample = doc_class(name=test_name)
-        sample.save()
+        sample.insert()
 
         sample.update({"$set": {"name": "new_name"}})
         assert sample.name == "new_name"
-        assert sample.num_1 == 2
+        assert sample.num_1 == 1
         assert sample.num_2 == 9
+        assert sample._private_num == 101
 
-        sample.set({"name": "awesome_name"}, skip_sync=True)
+        sample.set({"name": "awesome_name"})
 
-        assert sample.num_1 == 3
-        assert sample.num_2 == 8
-
-        sample._sync()
+        assert sample._private_num == 102
+        assert sample.num_2 == 9
         assert sample.name == "awesome_name"
+
+    @pytest.mark.parametrize(
+        "doc_class",
+        [
+            DocumentWithActions,
+            DocumentWithActions2,
+            InheritedDocumentWithActions,
+        ],
+    )
+    def test_actions_save(self, doc_class):
+        test_name = f"test_actions_save_{doc_class}"
+        sample = doc_class(name=test_name)
+        sample.save()
+        assert sample.num_1 == 1

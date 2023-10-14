@@ -1,5 +1,5 @@
 from functools import wraps
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from bunnet.odm.documents import DocType

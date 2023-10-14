@@ -1,7 +1,7 @@
 import pytest
 from pydantic.main import BaseModel
 
-from bunnet import init_bunnet
+from bunnet import Indexed, init_bunnet
 from bunnet.executors.migrate import MigrationSettings, run_migrate
 from bunnet.odm.documents import Document
 from bunnet.odm.models import InspectionStatuses
@@ -13,7 +13,7 @@ class Tag(BaseModel):
 
 
 class OldNote(Document):
-    name: str
+    name: Indexed(str, unique=True)
     tag: Tag
 
     class Settings:
@@ -21,6 +21,7 @@ class OldNote(Document):
 
 
 class Note(Document):
+    name: Indexed(str, unique=True)
     title: str
     tag: Tag
 
@@ -37,6 +38,8 @@ def notes(db):
         note.insert()
     yield
     OldNote.delete_all()
+    OldNote.get_motor_collection().drop()
+    OldNote.get_motor_collection().drop_indexes()
 
 
 def test_migration_break(settings, notes, db):
@@ -51,5 +54,8 @@ def test_migration_break(settings, notes, db):
     init_bunnet(database=db, document_models=[Note])
     inspection = OldNote.inspect_collection()
     assert inspection.status == InspectionStatuses.OK
-    note = ~OldNote.find_one({})
-    assert note.name == "0"
+    notes = OldNote.get_motor_collection().find().to_list(length=100)
+    names = set(n["name"] for n in notes)
+    assert names == {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+    for note in notes:
+        assert "title" not in note

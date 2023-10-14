@@ -2,7 +2,8 @@ from time import sleep
 
 import pytest
 
-from bunnet.odm.operators.update.general import Set, Max
+from bunnet.odm.operators.update.general import Max, Set
+from bunnet.odm.queries.update import UpdateResponse
 from tests.odm.models import Sample
 
 
@@ -190,6 +191,26 @@ def test_update_one_upsert_without_insert(
         Set({Sample.integer: 100}), on_insert=sample_doc_not_saved
     ).run()
     sleep(2)
+    new_docs = Sample.find_many(
+        Sample.string == sample_doc_not_saved.string
+    ).to_list()
+    assert len(new_docs) == 0
+
+
+def test_update_one_upsert_without_insert_return_doc(
+    preset_documents, sample_doc_not_saved
+):
+    result = (
+        Sample.find_one(Sample.integer > 1)
+        .upsert(
+            Set({Sample.integer: 100}),
+            on_insert=sample_doc_not_saved,
+            response_type=UpdateResponse.NEW_DOCUMENT,
+        )
+        .run()
+    )
+    assert isinstance(result, Sample)
+
     new_docs = Sample.find_many(
         Sample.string == sample_doc_not_saved.string
     ).to_list()

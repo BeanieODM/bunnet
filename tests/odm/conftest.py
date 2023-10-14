@@ -6,10 +6,14 @@ import pytest
 
 from bunnet.odm.utils.init import init_bunnet
 from tests.odm.models import (
+    ADocument,
+    BDocument,
     Bicycle,
     Bike,
     Bus,
     Car,
+    Doc2NonRoot,
+    DocNonRoot,
     DocumentForEncodingTest,
     DocumentForEncodingTestDate,
     DocumentMultiModelOne,
@@ -20,56 +24,76 @@ from tests.odm.models import (
     DocumentTestModelWithCustomCollectionName,
     DocumentTestModelWithIndexFlags,
     DocumentTestModelWithIndexFlagsAliases,
+    DocumentTestModelWithLink,
     DocumentTestModelWithSimpleIndex,
+    DocumentToBeLinked,
     DocumentUnion,
     DocumentWithActions,
     DocumentWithActions2,
+    DocumentWithBackLink,
+    DocumentWithBsonBinaryField,
     DocumentWithBsonEncodersFiledsTypes,
     DocumentWithCustomFiledsTypes,
     DocumentWithCustomIdInt,
     DocumentWithCustomIdUUID,
+    DocumentWithCustomInit,
+    DocumentWithDecimalField,
     DocumentWithExtras,
+    DocumentWithIndexMerging1,
+    DocumentWithIndexMerging2,
+    DocumentWithKeepNullsFalse,
+    DocumentWithLink,
+    DocumentWithList,
+    DocumentWithListBackLink,
+    DocumentWithListLink,
+    DocumentWithListOfLinks,
+    DocumentWithOptionalBackLink,
+    DocumentWithOptionalListBackLink,
     DocumentWithPydanticConfig,
     DocumentWithRevisionTurnedOn,
+    DocumentWithRootModelAsAField,
+    DocumentWithStringField,
+    DocumentWithTextIndexAndLink,
+    DocumentWithTimeStampToTestConsistency,
     DocumentWithTurnedOffStateManagement,
     DocumentWithTurnedOnReplaceObjects,
-    DocumentWithTurnedOnStateManagement,
     DocumentWithTurnedOnSavePrevious,
+    DocumentWithTurnedOnStateManagement,
+    DocumentWithTurnedOnStateManagementWithCustomId,
     DocumentWithValidationOnSave,
+    DocWithCallWrapper,
     Door,
     GeoObject,
     House,
     HouseWithRevision,
     InheritedDocumentWithActions,
+    LinkDocumentForTextSeacrh,
     Lock,
     LockWithRevision,
+    LoopedLinksA,
+    LoopedLinksB,
     Nested,
     Option1,
     Option2,
     Owner,
+    PackageElemMatch,
+    Region,
     Roof,
+    RootDocument,
     Sample,
     SampleLazyParsing,
     SampleWithMutableObjects,
+    SelfLinked,
+    StateAndDecimalFieldModel,
     SubDocument,
-    Test2NonRoot,
-    TestNonRoot,
+    UsersAddresses,
     Vehicle,
     Window,
     WindowWithRevision,
     Yard,
     YardWithRevision,
-    RootDocument,
-    ADocument,
-    BDocument,
-    StateAndDecimalFieldModel,
-    Region,
-    UsersAddresses,
-    SelfLinked,
-    LoopedLinksA,
-    LoopedLinksB,
 )
-from tests.odm.views import TestView
+from tests.odm.views import ViewForTest, ViewForTestWithLink
 
 
 @pytest.fixture
@@ -165,6 +189,7 @@ def init(db):
         DocumentWithExtras,
         DocumentWithPydanticConfig,
         DocumentTestModel,
+        DocumentTestModelWithLink,
         DocumentTestModelWithCustomCollectionName,
         DocumentTestModelWithSimpleIndex,
         DocumentTestModelWithIndexFlags,
@@ -192,7 +217,9 @@ def init(db):
         InheritedDocumentWithActions,
         DocumentForEncodingTest,
         DocumentForEncodingTestDate,
-        TestView,
+        DocumentWithStringField,
+        ViewForTest,
+        ViewForTestWithLink,
         DocumentMultiModelOne,
         DocumentMultiModelTwo,
         DocumentUnion,
@@ -208,8 +235,8 @@ def init(db):
         Bus,
         Owner,
         SampleWithMutableObjects,
-        TestNonRoot,
-        Test2NonRoot,
+        DocNonRoot,
+        Doc2NonRoot,
         SampleLazyParsing,
         RootDocument,
         ADocument,
@@ -220,11 +247,34 @@ def init(db):
         SelfLinked,
         LoopedLinksA,
         LoopedLinksB,
+        DocumentWithTurnedOnStateManagementWithCustomId,
+        DocumentWithDecimalField,
+        DocumentWithKeepNullsFalse,
+        PackageElemMatch,
+        DocumentWithLink,
+        DocumentWithBackLink,
+        DocumentWithListLink,
+        DocumentWithListBackLink,
+        DocumentWithListOfLinks,
+        DocumentToBeLinked,
+        DocumentWithTimeStampToTestConsistency,
+        DocumentWithIndexMerging1,
+        DocumentWithIndexMerging2,
+        DocumentWithCustomInit,
+        DocumentWithTextIndexAndLink,
+        LinkDocumentForTextSeacrh,
+        DocumentWithList,
+        DocumentWithBsonBinaryField,
+        DocumentWithRootModelAsAField,
+        DocWithCallWrapper,
+        DocumentWithOptionalBackLink,
+        DocumentWithOptionalListBackLink,
     ]
     init_bunnet(
         database=db,
         document_models=models,
     )
+
     yield None
 
     for model in models:
@@ -277,5 +327,16 @@ def documents(documents_not_inserted):
             documents_not_inserted(number, test_str, random)
         )
         return result.inserted_ids
+
+    return generate_documents
+
+
+@pytest.fixture
+def documents_with_links(documents):
+    def generate_documents():
+        documents(15)
+        results = DocumentTestModel.all().to_list()
+        for document in results:
+            DocumentTestModelWithLink(test_link=document).insert()
 
     return generate_documents

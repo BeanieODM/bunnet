@@ -15,7 +15,7 @@ class LogicalOperatorForListOfExpressions(BaseFindLogicalOperator):
         self,
         *expressions: Union[
             BaseFindOperator, Dict[str, Any], Mapping[str, Any]
-        ]
+        ],
     ):
         self.expressions = list(expressions)
 
@@ -39,7 +39,7 @@ class Or(LogicalOperatorForListOfExpressions):
         price: float
         category: str
 
-    Or({Product.price<10}, {Product.category=="Sweets"})
+    Or(Product.price<10, Product.category=="Sweets")
     ```
 
     Will return query object like
@@ -66,7 +66,7 @@ class And(LogicalOperatorForListOfExpressions):
         price: float
         category: str
 
-    And({Product.price<10}, {Product.category=="Sweets"})
+    And(Product.price<10, Product.category=="Sweets")
     ```
 
     Will return query object like
@@ -93,7 +93,7 @@ class Nor(BaseFindLogicalOperator):
         price: float
         category: str
 
-    Nor({Product.price<10}, {Product.category=="Sweets"})
+    Nor(Product.price<10, Product.category=="Sweets")
     ```
 
     Will return query object like
@@ -110,7 +110,7 @@ class Nor(BaseFindLogicalOperator):
         self,
         *expressions: Union[
             BaseFindOperator, Dict[str, Any], Mapping[str, Any], bool
-        ]
+        ],
     ):
         self.expressions = list(expressions)
 
@@ -130,7 +130,7 @@ class Not(BaseFindLogicalOperator):
         price: float
         category: str
 
-    Not({Product.price<10})
+    Not(Product.price<10)
     ```
 
     Will return query object like
@@ -148,4 +148,19 @@ class Not(BaseFindLogicalOperator):
 
     @property
     def query(self):
-        return {"$not": self.expression}
+        if len(self.expression) == 1:
+            expression_key = list(self.expression.keys())[0]
+            if expression_key.startswith("$"):
+                raise AttributeError(
+                    "Not operator can not be used with operators"
+                )
+            value = self.expression[expression_key]
+            if isinstance(value, dict):
+                internal_key = list(value.keys())[0]
+                if internal_key.startswith("$"):
+                    return {expression_key: {"$not": value}}
+
+            return {expression_key: {"$not": {"$eq": value}}}
+        raise AttributeError(
+            "Not operator can only be used with one expression"
+        )

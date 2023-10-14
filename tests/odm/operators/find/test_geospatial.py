@@ -1,4 +1,5 @@
 from bunnet.odm.operators.find.geospatial import (
+    Box,
     GeoIntersects,
     GeoWithin,
     Near,
@@ -37,6 +38,11 @@ def test_geo_within():
             }
         }
     }
+
+
+def test_box():
+    q = Box(Sample.geo, lower_left=[1, 3], upper_right=[2, 4])
+    assert q == {"geo": {"$geoWithin": {"$box": [[1, 3], [2, 4]]}}}
 
 
 def test_near():

@@ -1,55 +1,14 @@
-import inspect
-from typing import Optional, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
-from pydantic.fields import ModelField
-from pydantic.typing import get_origin
+from bunnet.odm.fields import (
+    ExpressionField,
+)
 
-from bunnet.odm.fields import LinkTypes, LinkInfo, Link, ExpressionField
-
-from typing import TYPE_CHECKING
+# from pydantic.fields import ModelField
+# from pydantic.typing import get_origin
 
 if TYPE_CHECKING:
     from bunnet import Document
-
-
-def detect_link(field: ModelField) -> Optional[LinkInfo]:
-    """
-    It detects link and returns LinkInfo if any found.
-
-    :param field: ModelField
-    :return: Optional[LinkInfo]
-    """
-    if field.type_ == Link:
-        if field.allow_none is True:
-            return LinkInfo(
-                field=field.name,
-                model_class=field.sub_fields[0].type_,  # type: ignore
-                link_type=LinkTypes.OPTIONAL_DIRECT,
-            )
-        return LinkInfo(
-            field=field.name,
-            model_class=field.sub_fields[0].type_,  # type: ignore
-            link_type=LinkTypes.DIRECT,
-        )
-    if (
-        inspect.isclass(get_origin(field.outer_type_))
-        and issubclass(get_origin(field.outer_type_), list)  # type: ignore
-        and len(field.sub_fields) == 1  # type: ignore
-    ):
-        internal_field = field.sub_fields[0]  # type: ignore
-        if internal_field.type_ == Link:
-            if field.allow_none is True:
-                return LinkInfo(
-                    field=field.name,
-                    model_class=internal_field.sub_fields[0].type_,  # type: ignore
-                    link_type=LinkTypes.OPTIONAL_LIST,
-                )
-            return LinkInfo(
-                field=field.name,
-                model_class=internal_field.sub_fields[0].type_,  # type: ignore
-                link_type=LinkTypes.LIST,
-            )
-    return None
 
 
 def convert_ids(

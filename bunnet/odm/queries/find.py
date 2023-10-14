@@ -1,7 +1,7 @@
 from typing import (
-    Callable,
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Generic,
     List,
@@ -16,14 +16,13 @@ from typing import (
 )
 
 from pydantic import BaseModel
+from pymongo import ReplaceOne
 from pymongo.client_session import ClientSession
 from pymongo.results import UpdateResult
 
-from pymongo import ReplaceOne
-
 from bunnet.exceptions import DocumentNotFound
-from bunnet.odm.cache import LRUCache
 from bunnet.odm.bulk import BulkWriter, Operation
+from bunnet.odm.cache import LRUCache
 from bunnet.odm.enums import SortDirection
 from bunnet.odm.interfaces.aggregation_methods import AggregateMethods
 from bunnet.odm.interfaces.clone import CloneInterface
@@ -38,9 +37,10 @@ from bunnet.odm.queries.delete import (
     DeleteOne,
 )
 from bunnet.odm.queries.update import (
-    UpdateQuery,
     UpdateMany,
     UpdateOne,
+    UpdateQuery,
+    UpdateResponse,
 )
 from bunnet.odm.utils.dump import get_dict
 from bunnet.odm.utils.encoder import Encoder
@@ -61,11 +61,6 @@ class FindQuery(
 ):
     """
     Find Query base class
-
-    Inherited from:
-
-    - [SessionMethods](https://roman-right.github.io/bunnet/api/interfaces/#sessionmethods)
-    - [UpdateMethods](https://roman-right.github.io/bunnet/api/interfaces/#aggregatemethods)
     """
 
     UpdateQueryType: Union[
@@ -110,63 +105,6 @@ class FindQuery(
             )
         else:
             return {}
-
-    def update(
-        self,
-        *args: Mapping[str, Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        **pymongo_kwargs,
-    ):
-        """
-        Create Update with modifications query
-        and provide search criteria there
-
-        :param args: *Mapping[str,Any] - the modifications to apply.
-        :param session: Optional[ClientSession]
-        :param bulk_writer: Optional[BulkWriter]
-        :return: UpdateMany query
-        """
-        self.set_session(session)
-        return (
-            self.UpdateQueryType(
-                document_model=self.document_model,
-                find_query=self.get_filter_query(),
-            )
-            .update(*args, bulk_writer=bulk_writer, **pymongo_kwargs)
-            .set_session(session=self.session)
-        )
-
-    def upsert(
-        self,
-        *args: Mapping[str, Any],
-        on_insert: "DocType",
-        session: Optional[ClientSession] = None,
-        **pymongo_kwargs,
-    ):
-        """
-        Create Update with modifications query
-        and provide search criteria there
-
-        :param args: *Mapping[str,Any] - the modifications to apply.
-        :param on_insert: DocType - document to insert if there is no matched
-        document in the collection
-        :param session: Optional[ClientSession]
-        :return: UpdateMany query
-        """
-        self.set_session(session)
-        return (
-            self.UpdateQueryType(
-                document_model=self.document_model,
-                find_query=self.get_filter_query(),
-            )
-            .upsert(
-                *args,
-                on_insert=on_insert,
-                **pymongo_kwargs,
-            )
-            .set_session(session=self.session)
-        )
 
     def delete(
         self,
@@ -226,13 +164,6 @@ class FindMany(
 ):
     """
     Find Many query class
-
-    Inherited from:
-
-    - [FindQuery](https://roman-right.github.io/bunnet/api/queries/#findquery)
-    - [BaseCursorQuery](https://roman-right.github.io/bunnet/api/queries/#basecursorquery) - generator
-    - [AggregateMethods](https://roman-right.github.io/bunnet/api/interfaces/#aggregatemethods)
-
     """
 
     UpdateQueryType = UpdateMany
@@ -474,6 +405,63 @@ class FindMany(
             self.limit_number = n
         return self
 
+    def update(
+        self,
+        *args: Mapping[str, Any],
+        session: Optional[ClientSession] = None,
+        bulk_writer: Optional[BulkWriter] = None,
+        **pymongo_kwargs,
+    ):
+        """
+        Create Update with modifications query
+        and provide search criteria there
+
+        :param args: *Mapping[str,Any] - the modifications to apply.
+        :param session: Optional[ClientSession]
+        :param bulk_writer: Optional[BulkWriter]
+        :return: UpdateMany query
+        """
+        self.set_session(session)
+        return (
+            self.UpdateQueryType(
+                document_model=self.document_model,
+                find_query=self.get_filter_query(),
+            )
+            .update(*args, bulk_writer=bulk_writer, **pymongo_kwargs)
+            .set_session(session=self.session)
+        )
+
+    def upsert(
+        self,
+        *args: Mapping[str, Any],
+        on_insert: "DocType",
+        session: Optional[ClientSession] = None,
+        **pymongo_kwargs,
+    ):
+        """
+        Create Update with modifications query
+        and provide search criteria there
+
+        :param args: *Mapping[str,Any] - the modifications to apply.
+        :param on_insert: DocType - document to insert if there is no matched
+        document in the collection
+        :param session: Optional[ClientSession]
+        :return: UpdateMany query
+        """
+        self.set_session(session)
+        return (
+            self.UpdateQueryType(
+                document_model=self.document_model,
+                find_query=self.get_filter_query(),
+            )
+            .upsert(
+                *args,
+                on_insert=on_insert,
+                **pymongo_kwargs,
+            )
+            .set_session(session=self.session)
+        )
+
     def update_many(
         self,
         *args: Mapping[str, Any],
@@ -485,7 +473,7 @@ class FindMany(
         Provide search criteria to the
         [UpdateMany](https://roman-right.github.io/bunnet/api/queries/#updatemany) query
 
-        :param args: *Mappingp[str,Any] - the modifications to apply.
+        :param args: *Mapping[str,Any] - the modifications to apply.
         :param session: Optional[ClientSession]
         :return: [UpdateMany](https://roman-right.github.io/bunnet/api/queries/#updatemany) query
         """
@@ -565,11 +553,18 @@ class FindMany(
         :return:[AggregationQuery](https://roman-right.github.io/bunnet/api/queries/#aggregationquery)
         """
         self.set_session(session=session)
+        find_query = self.get_filter_query()
+        if self.fetch_links:
+            find_aggregation_pipeline = self.build_aggregation_pipeline()
+            aggregation_pipeline = (
+                find_aggregation_pipeline + aggregation_pipeline
+            )
+            find_query = {}
         return self.AggregationQueryType(
             aggregation_pipeline=aggregation_pipeline,
             document_model=self.document_model,
             projection_model=projection_model,
-            find_query=self.get_filter_query(),
+            find_query=find_query,
             ignore_cache=ignore_cache,
             **pymongo_kwargs,
         ).set_session(session=self.session)
@@ -607,24 +602,33 @@ class FindMany(
                 self._cache_key, data
             )
 
+    def build_aggregation_pipeline(self):
+        aggregation_pipeline: List[Dict[str, Any]] = construct_lookup_queries(  # type: ignore
+            self.document_model
+        )
+        filter_query = self.get_filter_query()
+        if "$text" in filter_query:
+            text_query = filter_query["$text"]
+            aggregation_pipeline.insert(0, {"$match": {"$text": text_query}})
+            del filter_query["$text"]
+
+        aggregation_pipeline.append({"$match": filter_query})
+
+        sort_pipeline = {"$sort": {i[0]: i[1] for i in self.sort_expressions}}
+        if sort_pipeline["$sort"]:
+            aggregation_pipeline.append(sort_pipeline)
+        if self.skip_number != 0:
+            aggregation_pipeline.append({"$skip": self.skip_number})
+        if self.limit_number != 0:
+            aggregation_pipeline.append({"$limit": self.limit_number})
+        return aggregation_pipeline
+
     @property
     def motor_cursor(self):
         if self.fetch_links:
-            aggregation_pipeline: List[
+            aggregation_pipeline: List[  # type: ignore
                 Dict[str, Any]
-            ] = construct_lookup_queries(self.document_model)
-
-            aggregation_pipeline.append({"$match": self.get_filter_query()})
-
-            sort_pipeline = {
-                "$sort": {i[0]: i[1] for i in self.sort_expressions}
-            }
-            if sort_pipeline["$sort"]:
-                aggregation_pipeline.append(sort_pipeline)
-            if self.skip_number != 0:
-                aggregation_pipeline.append({"$skip": self.skip_number})
-            if self.limit_number != 0:
-                aggregation_pipeline.append({"$limit": self.limit_number})
+            ] = self.build_aggregation_pipeline()
 
             projection = get_projection(self.projection_model)
 
@@ -656,14 +660,41 @@ class FindMany(
             return None
         return res[0]
 
+    def count(self) -> int:
+        """
+        Number of found documents
+        :return: int
+        """
+        if self.fetch_links:
+            aggregation_pipeline: List[
+                Dict[str, Any]
+            ] = construct_lookup_queries(self.document_model)
+
+            aggregation_pipeline.append({"$match": self.get_filter_query()})
+
+            if self.skip_number != 0:
+                aggregation_pipeline.append({"$skip": self.skip_number})
+            if self.limit_number != 0:
+                aggregation_pipeline.append({"$limit": self.limit_number})
+
+            aggregation_pipeline.append({"$count": "count"})
+
+            result = list(
+                self.document_model.get_motor_collection().aggregate(
+                    aggregation_pipeline,
+                    session=self.session,
+                    **self.pymongo_kwargs,
+                )
+            )[:1]
+
+            return result[0]["count"] if result else 0
+
+        return super(FindMany, self).count()
+
 
 class FindOne(FindQuery[FindQueryResultType], RunInterface):
     """
     Find One query class
-
-    Inherited from:
-
-    - [FindQuery](https://roman-right.github.io/bunnet/api/queries/#findquery)
     """
 
     UpdateQueryType = UpdateOne
@@ -753,11 +784,79 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
         self.pymongo_kwargs.update(pymongo_kwargs)
         return self
 
+    def update(
+        self,
+        *args: Mapping[str, Any],
+        session: Optional[ClientSession] = None,
+        bulk_writer: Optional[BulkWriter] = None,
+        response_type: Optional[UpdateResponse] = None,
+        **pymongo_kwargs,
+    ):
+        """
+        Create Update with modifications query
+        and provide search criteria there
+
+        :param args: *Mapping[str,Any] - the modifications to apply.
+        :param session: Optional[ClientSession]
+        :param bulk_writer: Optional[BulkWriter]
+        :param response_type: Optional[UpdateResponse]
+        :return: UpdateMany query
+        """
+        self.set_session(session)
+        return (
+            self.UpdateQueryType(
+                document_model=self.document_model,
+                find_query=self.get_filter_query(),
+            )
+            .update(
+                *args,
+                bulk_writer=bulk_writer,
+                response_type=response_type,
+                **pymongo_kwargs,
+            )
+            .set_session(session=self.session)
+        )
+
+    def upsert(
+        self,
+        *args: Mapping[str, Any],
+        on_insert: "DocType",
+        session: Optional[ClientSession] = None,
+        response_type: Optional[UpdateResponse] = None,
+        **pymongo_kwargs,
+    ):
+        """
+        Create Update with modifications query
+        and provide search criteria there
+
+        :param args: *Mapping[str,Any] - the modifications to apply.
+        :param on_insert: DocType - document to insert if there is no matched
+        document in the collection
+        :param session: Optional[ClientSession]
+        :param response_type: Optional[UpdateResponse]
+        :return: UpdateMany query
+        """
+        self.set_session(session)
+        return (
+            self.UpdateQueryType(
+                document_model=self.document_model,
+                find_query=self.get_filter_query(),
+            )
+            .upsert(
+                *args,
+                on_insert=on_insert,
+                response_type=response_type,
+                **pymongo_kwargs,
+            )
+            .set_session(session=self.session)
+        )
+
     def update_one(
         self,
         *args: Mapping[str, Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
+        response_type: Optional[UpdateResponse] = None,
         **pymongo_kwargs,
     ) -> UpdateOne:
         """
@@ -765,7 +864,8 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
         provide search criteria there
         :param args: *Mapping[str,Any] - the modifications to apply
         :param session: Optional[ClientSession] - PyMongo sessions
-        :return: [UpdateOne](https://roman-right.github.io/bunnet/api/queries/#updateone) query
+        :param response_type: Optional[UpdateResponse]
+        :return: [UpdateOne](query.md#updateone) query
         """
         return cast(
             UpdateOne,
@@ -773,6 +873,7 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
                 *args,
                 session=session,
                 bulk_writer=bulk_writer,
+                response_type=response_type,
                 **pymongo_kwargs,
             ),
         )
@@ -816,7 +917,12 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
             result: UpdateResult = (
                 self.document_model.get_motor_collection().replace_one(
                     self.get_filter_query(),
-                    get_dict(document, to_db=True, exclude={"_id"}),
+                    get_dict(
+                        document,
+                        to_db=True,
+                        exclude={"_id"},
+                        keep_nulls=document.get_settings().keep_nulls,
+                    ),
                     session=self.session,
                 )
             )
@@ -840,7 +946,7 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
 
     def _find_one(self):
         if self.fetch_links:
-            return self.document_model.find(
+            return self.document_model.find_many(
                 *self.find_expressions,
                 session=self.session,
                 fetch_links=self.fetch_links,
@@ -889,3 +995,17 @@ class FindOne(FindQuery[FindQueryResultType], RunInterface):
         return cast(
             FindQueryResultType, parse_obj(self.projection_model, document)
         )
+
+    def count(self) -> int:
+        """
+        Count the number of documents matching the query
+        :return: int
+        """
+        if self.fetch_links:
+            return self.document_model.find_many(
+                *self.find_expressions,
+                session=self.session,
+                fetch_links=self.fetch_links,
+                **self.pymongo_kwargs,
+            ).count()
+        return super(FindOne, self).count()

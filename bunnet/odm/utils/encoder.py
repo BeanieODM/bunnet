@@ -1,3 +1,4 @@
+import re
 from collections import deque
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -14,25 +15,29 @@ from pathlib import PurePath
 from types import GeneratorType
 from typing import (
     AbstractSet,
+    Any,
+    Callable,
+    Dict,
     List,
     Mapping,
-    Union,
     Optional,
+    Type,
+    Union,
 )
-from typing import Any, Callable, Dict, Type
 from uuid import UUID
 
 import bson
-from bson import ObjectId, DBRef, Binary, Decimal128
-from pydantic import BaseModel
-from pydantic import SecretBytes, SecretStr
-from pydantic.color import Color
+from bson import Binary, DBRef, Decimal128, ObjectId, Regex
+from pydantic import BaseModel, SecretBytes, SecretStr
 
-from bunnet.odm.fields import Link, LinkTypes
 from bunnet.odm import documents
+from bunnet.odm.fields import Link, LinkTypes
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2, get_iterator
+
+if IS_PYDANTIC_V2:
+    from pydantic import RootModel
 
 ENCODERS_BY_TYPE: Dict[Type[Any], Callable[[Any], Any]] = {
-    Color: str,
     timedelta: lambda td: td.total_seconds(),
     Decimal: Decimal128,
     deque: list,
@@ -49,7 +54,15 @@ ENCODERS_BY_TYPE: Dict[Type[Any], Callable[[Any], Any]] = {
     Link: lambda l: l.ref,  # noqa: E741
     bytes: lambda b: b if isinstance(b, Binary) else Binary(b),
     UUID: lambda u: bson.Binary.from_uuid(u),
+    re.Pattern: Regex.from_native,
 }
+
+
+class Ignore:
+    ...
+
+
+IGNORE = Ignore()
 
 
 class Encoder:
@@ -65,11 +78,13 @@ class Encoder:
         custom_encoders: Optional[Dict[Type, Callable]] = None,
         by_alias: bool = True,
         to_db: bool = False,
+        keep_nulls: bool = True,
     ):
         self.exclude = exclude or {}
         self.by_alias = by_alias
         self.custom_encoders = custom_encoders or {}
         self.to_db = to_db
+        self.keep_nulls = keep_nulls
 
     def encode(self, obj: Any):
         """
@@ -79,7 +94,7 @@ class Encoder:
 
     def encode_document(self, obj):
         """
-        bunnet Document class case
+        Beanie Document class case
         """
         obj.parse_store()
 
@@ -87,17 +102,22 @@ class Encoder:
             custom_encoders=obj.get_settings().bson_encoders,
             by_alias=self.by_alias,
             to_db=self.to_db,
+            keep_nulls=self.keep_nulls,
         )
 
         link_fields = obj.get_link_fields()
-        obj_dict: Dict[str, Any] = {}
+        obj_dict: Dict[str, Any] = {}  # type: ignore
         if obj.get_settings().union_doc is not None:
-            obj_dict["_class_id"] = obj.__class__.__name__
+            obj_dict[obj.get_settings().class_id] = (
+                obj.get_settings().union_doc_alias or obj.__class__.__name__
+            )
         if obj._inheritance_inited:
-            obj_dict["_class_id"] = obj._class_id
+            obj_dict[obj.get_settings().class_id] = obj._class_id
 
-        for k, o in obj._iter(to_dict=False, by_alias=self.by_alias):
-            if k not in self.exclude:
+        for k, o in get_iterator(obj, by_alias=self.by_alias):
+            if k not in self.exclude and (
+                self.keep_nulls is True or o is not None
+            ):
                 if link_fields and k in link_fields:
                     if link_fields[k].link_type == LinkTypes.LIST:
                         obj_dict[k] = [link.to_ref() for link in o]
@@ -113,9 +133,36 @@ class Encoder:
                             obj_dict[k] = [link.to_ref() for link in o]
                         else:
                             obj_dict[k] = o
+                    if (
+                        link_fields[k].link_type == LinkTypes.BACK_DIRECT
+                        and self.to_db
+                    ):
+                        obj_dict[k] = IGNORE
+                    if (
+                        link_fields[k].link_type == LinkTypes.BACK_LIST
+                        and self.to_db
+                    ):
+                        obj_dict[k] = IGNORE
+                    if (
+                        link_fields[k].link_type
+                        == LinkTypes.OPTIONAL_BACK_DIRECT
+                        and self.to_db
+                    ):
+                        obj_dict[k] = IGNORE
+                    if (
+                        link_fields[k].link_type
+                        == LinkTypes.OPTIONAL_BACK_LIST
+                        and self.to_db
+                    ):
+                        obj_dict[k] = IGNORE
                 else:
                     obj_dict[k] = o
-                obj_dict[k] = encoder.encode(obj_dict[k])
+
+                if isinstance(obj_dict[k], Ignore) and obj_dict[k] == IGNORE:
+                    # Check the class, as direct comparison might not work, like with numpy arrays
+                    del obj_dict[k]
+                else:
+                    obj_dict[k] = encoder.encode(obj_dict[k])
         return obj_dict
 
     def encode_base_model(self, obj):
@@ -123,11 +170,19 @@ class Encoder:
         BaseModel case
         """
         obj_dict = {}
-        for k, o in obj._iter(to_dict=False, by_alias=self.by_alias):
-            if k not in self.exclude:
+        for k, o in get_iterator(obj, by_alias=self.by_alias):
+            if k not in self.exclude and (
+                self.keep_nulls is True or o is not None
+            ):
                 obj_dict[k] = self._encode(o)
 
         return obj_dict
+
+    def encode_root_model(self, obj):
+        """
+        RootModel case
+        """
+        return self._encode(obj.root)
 
     def encode_dict(self, obj):
         """
@@ -160,6 +215,8 @@ class Encoder:
 
         if isinstance(obj, documents.Document):
             return self.encode_document(obj)
+        if IS_PYDANTIC_V2 and isinstance(obj, RootModel):
+            return self.encode_root_model(obj)
         if isinstance(obj, BaseModel):
             return self.encode_base_model(obj)
         if isinstance(obj, dict):
@@ -168,7 +225,17 @@ class Encoder:
             return self.encode_iterable(obj)
 
         if isinstance(
-            obj, (str, int, float, ObjectId, datetime, type(None), DBRef)
+            obj,
+            (
+                str,
+                int,
+                float,
+                ObjectId,
+                datetime,
+                type(None),
+                DBRef,
+                Decimal128,
+            ),
         ):
             return obj
 

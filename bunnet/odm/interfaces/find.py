@@ -1,19 +1,20 @@
 from abc import abstractmethod
-from typing import (
-    Optional,
-    List,
-    Type,
-    Union,
-    Tuple,
-    Mapping,
-    Any,
-    overload,
-    ClassVar,
-    TypeVar,
-    Dict,
-    TYPE_CHECKING,
-)
 from collections.abc import Iterable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
+
 from pydantic import (
     BaseModel,
 )
@@ -21,7 +22,7 @@ from pymongo.client_session import ClientSession
 
 from bunnet.odm.enums import SortDirection
 from bunnet.odm.interfaces.detector import ModelType
-from bunnet.odm.queries.find import FindOne, FindMany
+from bunnet.odm.queries.find import FindMany, FindOne
 from bunnet.odm.settings.base import ItemSettings
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ class FindInterface:
     ) -> FindOne["DocumentProjectionType"]:
         ...
 
-    @classmethod
+    @classmethod  # type: ignore
     def find_one(  # type: ignore
         cls: Type["DocType"],
         *args: Union[Mapping[str, Any], bool],
@@ -88,7 +89,7 @@ class FindInterface:
         fetch_links: bool = False,
         with_children: bool = False,
         **pymongo_kwargs,
-    ) -> Union[FindOne["DocType"], FindOne["DocumentProjectionType"]]:
+    ) -> "DocType":
         """
         Find one document by criteria.
         Returns [FindOne](https://roman-right.github.io/bunnet/api/queries/#findone) query object.
@@ -405,7 +406,7 @@ class FindInterface:
             (
                 True
                 for a in args
-                if isinstance(a, Iterable) and "_class_id" in a
+                if isinstance(a, Iterable) and cls.get_settings().class_id in a
             )
         ):
             return args
@@ -415,11 +416,11 @@ class FindInterface:
             and cls._inheritance_inited
         ):
             if not with_children:
-                args += ({"_class_id": cls._class_id},)
+                args += ({cls.get_settings().class_id: cls._class_id},)
             else:
                 args += (
                     {
-                        "_class_id": {
+                        cls.get_settings().class_id: {
                             "$in": [cls._class_id]
                             + [cname for cname in cls._children.keys()]
                         }
@@ -427,5 +428,11 @@ class FindInterface:
                 )
 
         if cls.get_settings().union_doc:
-            args += ({"_class_id": cls.__name__},)
+            args += (
+                {
+                    cls.get_settings()
+                    .class_id: cls.get_settings()
+                    .union_doc_alias
+                },
+            )
         return args

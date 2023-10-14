@@ -1,5 +1,6 @@
 import pytest
 from pydantic.main import BaseModel
+
 from bunnet import init_bunnet
 from bunnet.executors.migrate import MigrationSettings, run_migrate
 from bunnet.migrations.models import RunningDirections

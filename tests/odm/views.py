@@ -1,8 +1,9 @@
+from bunnet.odm.fields import Link
 from bunnet.odm.views import View
-from tests.odm.models import DocumentTestModel
+from tests.odm.models import DocumentTestModel, DocumentTestModelWithLink
 
 
-class TestView(View):
+class ViewForTest(View):
     number: int
     string: str
 
@@ -13,3 +14,12 @@ class TestView(View):
             {"$match": {"$expr": {"$gt": ["$test_int", 8]}}},
             {"$project": {"number": "$test_int", "string": "$test_str"}},
         ]
+
+
+class ViewForTestWithLink(View):
+    link: Link[DocumentTestModel]
+
+    class Settings:
+        view_name = "test_view_with_link"
+        source = DocumentTestModelWithLink
+        pipeline = [{"$set": {"link": "$test_link"}}]

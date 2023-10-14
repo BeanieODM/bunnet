@@ -1,10 +1,16 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from bunnet import WriteRules, PydanticObjectId
+from bunnet import PydanticObjectId, WriteRules
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 from tests.fastapi.models import HouseAPI, WindowAPI
 
 house_router = APIRouter()
+if not IS_PYDANTIC_V2:
+    from fastapi.encoders import ENCODERS_BY_TYPE
+    from pydantic.json import ENCODERS_BY_TYPE as PYDANTIC_ENCODERS_BY_TYPE
+
+    ENCODERS_BY_TYPE.update(PYDANTIC_ENCODERS_BY_TYPE)
 
 
 class WindowInput(BaseModel):
@@ -15,6 +21,11 @@ class WindowInput(BaseModel):
 def create_window(window: WindowAPI):
     window.create()
     return window
+
+
+@house_router.post("/windows_2/")
+def create_window_2(window: WindowAPI):
+    return window.save()
 
 
 @house_router.post("/houses/", response_model=HouseAPI)

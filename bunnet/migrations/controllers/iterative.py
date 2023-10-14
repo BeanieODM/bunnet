@@ -1,9 +1,10 @@
-from inspect import signature, isclass
-from typing import Type, Optional, Union, List
+from inspect import isclass, signature
+from typing import List, Optional, Type, Union
 
-from bunnet.migrations.utils import update_dict
 from bunnet.migrations.controllers.base import BaseMigrationController
+from bunnet.migrations.utils import update_dict
 from bunnet.odm.documents import Document
+from bunnet.odm.utils.pydantic import parse_model
 
 
 class DummyOutput:
@@ -50,7 +51,7 @@ def iterative_migration(
             )
             if input_signature is None:
                 raise RuntimeError("input_signature must not be None")
-            self.input_document_model: Type[
+            self.input_document_model: Type[  # type: ignore
                 Document
             ] = input_signature.annotation
             output_signature = self.function_signature.parameters.get(
@@ -58,7 +59,7 @@ def iterative_migration(
             )
             if output_signature is None:
                 raise RuntimeError("output_signature must not be None")
-            self.output_document_model: Type[
+            self.output_document_model: Type[  # type: ignore
                 Document
             ] = output_signature.annotation
 
@@ -101,8 +102,8 @@ def iterative_migration(
                 self.function(**function_kwargs)
                 output_dict = input_document.dict()
                 update_dict(output_dict, output.dict())
-                output_document = self.output_document_model.parse_obj(
-                    output_dict
+                output_document = parse_model(
+                    self.output_document_model, output_dict
                 )
                 output_documents.append(output_document)
 

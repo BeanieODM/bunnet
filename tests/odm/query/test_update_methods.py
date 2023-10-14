@@ -1,5 +1,5 @@
 from bunnet.odm.operators.update.general import Max
-from bunnet.odm.queries.update import UpdateQuery, UpdateMany
+from bunnet.odm.queries.update import UpdateMany, UpdateQuery
 from tests.odm.models import Sample
 
 
