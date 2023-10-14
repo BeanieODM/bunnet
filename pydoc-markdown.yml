@@ -41,11 +41,11 @@ renderer:
   markdown:
     use_fixed_header_levels: true
     header_level_by_type:
-      Module: 1
-      Class: 2
-      Method: 3
-      Function: 3
-      Data: 3
+      Module: 2
+      Class: 3
+      Method: 4
+      Function: 4
+      Data: 4
     descriptive_class_title: false
     descriptive_module_title: false
     add_method_class_prefix: true
@@ -70,6 +70,8 @@ renderer:
           source: docs/tutorial/insert.md
         - title: Finding documents
           source: docs/tutorial/find.md
+        - title: Lazy parsing
+          source: docs/tutorial/lazy_parse.md
         - title: Updating & Deleting
           source: docs/tutorial/update.md
         - title: Indexes

@@ -1,6 +1,6 @@
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from tests.typing.models import Test, ProjectionTest
+from tests.typing.models import ProjectionTest, Test
 
 
 def aggregate() -> List[Dict[str, Any]]:

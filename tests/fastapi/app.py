@@ -1,17 +1,16 @@
+from fastapi import FastAPI
 from pymongo import MongoClient
 
 from bunnet import init_bunnet
-from fastapi import FastAPI
-
 from tests.conftest import Settings
-from tests.fastapi.models import HouseAPI, WindowAPI, DoorAPI, RoofAPI
+from tests.fastapi.models import DoorAPI, HouseAPI, RoofAPI, WindowAPI
 from tests.fastapi.routes import house_router
 
 app = FastAPI()
 
 
 @app.on_event("startup")
-def app_init():
+async def app_init():
     # CREATE MOTOR CLIENT
     client = MongoClient(Settings().mongodb_dsn)
 

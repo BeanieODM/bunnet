@@ -1,14 +1,14 @@
 from abc import abstractmethod
-from typing import Dict, Mapping, Union, Any, Optional
+from typing import Any, Dict, Mapping, Optional, Union
 
 from pymongo.client_session import ClientSession
 
 from bunnet.odm.bulk import BulkWriter
 from bunnet.odm.fields import ExpressionField
 from bunnet.odm.operators.update.general import (
-    Set,
     CurrentDate,
     Inc,
+    Set,
 )
 
 
@@ -23,7 +23,7 @@ class UpdateMethods:
         *args: Mapping[str, Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
-        **kwargs
+        **kwargs,
     ):
         return self
 
@@ -32,7 +32,7 @@ class UpdateMethods:
         expression: Dict[Union[ExpressionField, str], Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Set values
@@ -65,7 +65,7 @@ class UpdateMethods:
         expression: Dict[Union[ExpressionField, str], Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Set current date
@@ -81,7 +81,7 @@ class UpdateMethods:
             CurrentDate(expression),
             session=session,
             bulk_writer=bulk_writer,
-            **kwargs
+            **kwargs,
         )
 
     def inc(
@@ -89,7 +89,7 @@ class UpdateMethods:
         expression: Dict[Union[ExpressionField, str], Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Increment

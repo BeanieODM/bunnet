@@ -1,7 +1,7 @@
-from bunnet.exceptions import NotSupported
-from bunnet.odm.fields import LinkTypes, LinkInfo
-from typing import TYPE_CHECKING, List, Dict, Any, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Type
 
+from bunnet.exceptions import NotSupported
+from bunnet.odm.fields import LinkInfo, LinkTypes
 from bunnet.odm.interfaces.detector import ModelType
 
 if TYPE_CHECKING:
@@ -36,42 +36,42 @@ def construct_query(
             lookup_steps = [
                 {
                     "$lookup": {
-                        "from": link_info.model_class.get_motor_collection().name,
-                        # type: ignore
-                        "localField": f"{link_info.field}.$id",
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "localField": f"{link_info.lookup_field_name}.$id",
                         "foreignField": "_id",
-                        "as": f"_link_{link_info.field}",
+                        "as": f"_link_{link_info.field_name}",
                     }
                 },
                 {
                     "$unwind": {
-                        "path": f"$_link_{link_info.field}",
+                        "path": f"$_link_{link_info.field_name}",
                         "preserveNullAndEmptyArrays": True,
                     }
                 },
                 {
                     "$set": {
-                        link_info.field: {
+                        link_info.field_name: {
                             "$cond": {
                                 "if": {
                                     "$ifNull": [
-                                        f"$_link_{link_info.field}",
+                                        f"$_link_{link_info.field_name}",
                                         False,
                                     ]
                                 },
-                                "then": f"$_link_{link_info.field}",
-                                "else": f"${link_info.field}",
+                                "then": f"$_link_{link_info.field_name}",
+                                "else": f"${link_info.field_name}",
                             }
                         }
                     }
                 },
+                {"$unset": f"_link_{link_info.field_name}"},
             ]  # type: ignore
             if link_info.nested_links is not None:
-                lookup_steps[0]["$lookup"]["pipeline"] = []
+                lookup_steps[0]["$lookup"]["pipeline"] = []  # type: ignore
                 for nested_link in link_info.nested_links:
                     construct_query(
                         link_info=link_info.nested_links[nested_link],
-                        queries=lookup_steps[0]["$lookup"]["pipeline"],
+                        queries=lookup_steps[0]["$lookup"]["pipeline"],  # type: ignore
                         database_major_version=database_major_version,
                     )
             queries += lookup_steps
@@ -80,9 +80,11 @@ def construct_query(
             lookup_steps = [
                 {
                     "$lookup": {
-                        "from": link_info.model_class.get_motor_collection().name,
-                        "let": {"link_id": f"${link_info.field}.$id"},
-                        "as": f"_link_{link_info.field}",
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "let": {
+                            "link_id": f"${link_info.lookup_field_name}.$id"
+                        },
+                        "as": f"_link_{link_info.field_name}",
                         "pipeline": [
                             {
                                 "$match": {
@@ -94,45 +96,149 @@ def construct_query(
                 },
                 {
                     "$unwind": {
-                        "path": f"$_link_{link_info.field}",
+                        "path": f"$_link_{link_info.field_name}",
                         "preserveNullAndEmptyArrays": True,
                     }
                 },
                 {
                     "$set": {
-                        link_info.field: {
+                        link_info.field_name: {
                             "$cond": {
                                 "if": {
                                     "$ifNull": [
-                                        f"$_link_{link_info.field}",
+                                        f"$_link_{link_info.field_name}",
                                         False,
                                     ]
                                 },
-                                "then": f"$_link_{link_info.field}",
-                                "else": f"${link_info.field}",
+                                "then": f"$_link_{link_info.field_name}",
+                                "else": f"${link_info.field_name}",
                             }
                         }
                     }
                 },
+                {"$unset": f"_link_{link_info.field_name}"},
             ]
             for nested_link in link_info.nested_links:
                 construct_query(
                     link_info=link_info.nested_links[nested_link],
-                    queries=lookup_steps[0]["$lookup"]["pipeline"],
+                    queries=lookup_steps[0]["$lookup"]["pipeline"],  # type: ignore
                     database_major_version=database_major_version,
                 )
             queries += lookup_steps
 
-    else:
+    elif link_info.link_type in [
+        LinkTypes.BACK_DIRECT,
+        LinkTypes.OPTIONAL_BACK_DIRECT,
+    ]:
+        if database_major_version >= 5 or link_info.nested_links is None:
+            lookup_steps = [
+                {
+                    "$lookup": {
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "localField": "_id",
+                        "foreignField": f"{link_info.lookup_field_name}.$id",
+                        "as": f"_link_{link_info.field_name}",
+                    }
+                },
+                {
+                    "$unwind": {
+                        "path": f"$_link_{link_info.field_name}",
+                        "preserveNullAndEmptyArrays": True,
+                    }
+                },
+                {
+                    "$set": {
+                        link_info.field_name: {
+                            "$cond": {
+                                "if": {
+                                    "$ifNull": [
+                                        f"$_link_{link_info.field_name}",
+                                        False,
+                                    ]
+                                },
+                                "then": f"$_link_{link_info.field_name}",
+                                "else": f"${link_info.field_name}",
+                            }
+                        }
+                    }
+                },
+                {"$unset": f"_link_{link_info.field_name}"},
+            ]  # type: ignore
+            if link_info.nested_links is not None:
+                lookup_steps[0]["$lookup"]["pipeline"] = []  # type: ignore
+                for nested_link in link_info.nested_links:
+                    construct_query(
+                        link_info=link_info.nested_links[nested_link],
+                        queries=lookup_steps[0]["$lookup"]["pipeline"],  # type: ignore
+                        database_major_version=database_major_version,
+                    )
+            queries += lookup_steps
+
+        else:
+            lookup_steps = [
+                {
+                    "$lookup": {
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "let": {"link_id": "$_id"},
+                        "as": f"_link_{link_info.field_name}",
+                        "pipeline": [
+                            {
+                                "$match": {
+                                    "$expr": {
+                                        "$eq": [
+                                            f"${link_info.lookup_field_name}.$id",
+                                            "$$link_id",
+                                        ]
+                                    }
+                                }
+                            },
+                        ],
+                    }
+                },
+                {
+                    "$unwind": {
+                        "path": f"$_link_{link_info.field_name}",
+                        "preserveNullAndEmptyArrays": True,
+                    }
+                },
+                {
+                    "$set": {
+                        link_info.field_name: {
+                            "$cond": {
+                                "if": {
+                                    "$ifNull": [
+                                        f"$_link_{link_info.field_name}",
+                                        False,
+                                    ]
+                                },
+                                "then": f"$_link_{link_info.field_name}",
+                                "else": f"${link_info.field_name}",
+                            }
+                        }
+                    }
+                },
+                {"$unset": f"_link_{link_info.field_name}"},
+            ]
+            for nested_link in link_info.nested_links:
+                construct_query(
+                    link_info=link_info.nested_links[nested_link],
+                    queries=lookup_steps[0]["$lookup"]["pipeline"],  # type: ignore
+                    database_major_version=database_major_version,
+                )
+            queries += lookup_steps
+
+    elif link_info.link_type in [
+        LinkTypes.LIST,
+        LinkTypes.OPTIONAL_LIST,
+    ]:
         if database_major_version >= 5 or link_info.nested_links is None:
             queries.append(
                 {
                     "$lookup": {
-                        "from": link_info.model_class.get_motor_collection().name,
-                        # type: ignore
-                        "localField": f"{link_info.field}.$id",
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "localField": f"{link_info.lookup_field_name}.$id",
                         "foreignField": "_id",
-                        "as": link_info.field,
+                        "as": link_info.field_name,
                     }
                 }
             )
@@ -148,9 +254,9 @@ def construct_query(
         else:
             lookup_step = {
                 "$lookup": {
-                    "from": link_info.model_class.get_motor_collection().name,
-                    "let": {"link_id": f"${link_info.field}.$id"},
-                    "as": link_info.field,
+                    "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                    "let": {"link_id": f"${link_info.lookup_field_name}.$id"},
+                    "as": link_info.field_name,
                     "pipeline": [
                         {"$match": {"$expr": {"$in": ["$_id", "$$link_id"]}}},
                     ],
@@ -164,4 +270,58 @@ def construct_query(
                     database_major_version=database_major_version,
                 )
             queries.append(lookup_step)
+
+    elif link_info.link_type in [
+        LinkTypes.BACK_LIST,
+        LinkTypes.OPTIONAL_BACK_LIST,
+    ]:
+        if database_major_version >= 5 or link_info.nested_links is None:
+            queries.append(
+                {
+                    "$lookup": {
+                        "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                        "localField": "_id",
+                        "foreignField": f"{link_info.lookup_field_name}.$id",
+                        "as": link_info.field_name,
+                    }
+                }
+            )
+
+            if link_info.nested_links is not None:
+                queries[-1]["$lookup"]["pipeline"] = []
+                for nested_link in link_info.nested_links:
+                    construct_query(
+                        link_info=link_info.nested_links[nested_link],
+                        queries=queries[-1]["$lookup"]["pipeline"],
+                        database_major_version=database_major_version,
+                    )
+        else:
+            lookup_step = {
+                "$lookup": {
+                    "from": link_info.document_class.get_motor_collection().name,  # type: ignore
+                    "let": {"link_id": "$_id"},
+                    "as": link_info.field_name,
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {
+                                    "$in": [
+                                        "$$link_id",
+                                        f"${link_info.lookup_field_name}.$id",
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                }
+            }
+
+            for nested_link in link_info.nested_links:
+                construct_query(
+                    link_info=link_info.nested_links[nested_link],
+                    queries=lookup_step["$lookup"]["pipeline"],
+                    database_major_version=database_major_version,
+                )
+            queries.append(lookup_step)
+
     return queries

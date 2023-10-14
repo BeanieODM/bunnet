@@ -1,45 +1,48 @@
 from abc import abstractmethod
+from enum import Enum
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Type,
+    Union,
+)
 
+from pymongo import ReturnDocument
+from pymongo import UpdateMany as UpdateManyPyMongo
+from pymongo import UpdateOne as UpdateOnePyMongo
+from pymongo.client_session import ClientSession
+from pymongo.results import UpdateResult
 
 from bunnet.odm.bulk import BulkWriter, Operation
 from bunnet.odm.interfaces.clone import CloneInterface
 from bunnet.odm.interfaces.run import RunInterface
-from bunnet.odm.utils.encoder import Encoder
-from typing import (
-    Callable,
-    List,
-    Type,
-    TYPE_CHECKING,
-    Optional,
-    Mapping,
-    Any,
-    Dict,
-    Union,
-)
-
-from pymongo.client_session import ClientSession
-from pymongo.results import UpdateResult, InsertOneResult
-
 from bunnet.odm.interfaces.session import SessionMethods
 from bunnet.odm.interfaces.update import (
     UpdateMethods,
 )
 from bunnet.odm.operators.update import BaseUpdateOperator
-from pymongo import UpdateOne as UpdateOnePyMongo
-from pymongo import UpdateMany as UpdateManyPyMongo
+from bunnet.odm.operators.update.general import SetRevisionId
+from bunnet.odm.utils.encoder import Encoder
+from bunnet.odm.utils.parsing import parse_obj
 
 if TYPE_CHECKING:
     from bunnet.odm.documents import DocType
 
 
+class UpdateResponse(str, Enum):
+    UPDATE_RESULT = "UPDATE_RESULT"  # PyMongo update result
+    OLD_DOCUMENT = "OLD_DOCUMENT"  # Original document
+    NEW_DOCUMENT = "NEW_DOCUMENT"  # Updated document
+
+
 class UpdateQuery(UpdateMethods, SessionMethods, RunInterface, CloneInterface):
     """
     Update Query base class
-
-    Inherited from:
-
-    - [SessionMethods](https://roman-right.github.io/bunnet/api/interfaces/#sessionmethods)
-    - [UpdateMethods](https://roman-right.github.io/bunnet/api/interfaces/#aggregatemethods)
     """
 
     def __init__(
@@ -60,15 +63,47 @@ class UpdateQuery(UpdateMethods, SessionMethods, RunInterface, CloneInterface):
 
     @property
     def update_query(self) -> Dict[str, Any]:
-        query: Dict[str, Any] = {}
+        query: Union[Dict[str, Any], List[Dict[str, Any]], None] = None
         for expression in self.update_expressions:
             if isinstance(expression, BaseUpdateOperator):
+                if query is None:
+                    query = {}
+                if isinstance(query, list):
+                    raise TypeError("Wrong expression type")
                 query.update(expression.query)
             elif isinstance(expression, dict):
+                if query is None:
+                    query = {}
+                if isinstance(query, list):
+                    raise TypeError("Wrong expression type")
                 query.update(expression)
+            elif isinstance(expression, SetRevisionId):
+                if query is None:
+                    query = {}
+                if isinstance(query, list):
+                    raise TypeError("Wrong expression type")
+                set_query = query.get("$set", {})
+                set_query.update(expression.query.get("$set", {}))
+                query["$set"] = set_query
+            elif isinstance(expression, list):
+                if query is None:
+                    query = []
+                if isinstance(query, dict):
+                    raise TypeError("Wrong expression type")
+                query.extend(expression)
             else:
                 raise TypeError("Wrong expression type")
         return Encoder(custom_encoders=self.encoders).encode(query)
+
+    @abstractmethod
+    def _update(self) -> UpdateResult:
+        ...
+
+
+class UpdateMany(UpdateQuery):
+    """
+    Update Many query class
+    """
 
     def update(
         self,
@@ -83,7 +118,7 @@ class UpdateQuery(UpdateMethods, SessionMethods, RunInterface, CloneInterface):
         :param args: *Union[dict, Mapping] - the modifications to apply.
         :param session: Optional[ClientSession]
         :param bulk_writer: Optional[BulkWriter]
-        :param **pymongo_kwargs: pymongo native parameters for update operation
+        :param pymongo_kwargs: pymongo native parameters for update operation
         :return: UpdateMany query
         """
         self.set_session(session=session)
@@ -114,41 +149,6 @@ class UpdateQuery(UpdateMethods, SessionMethods, RunInterface, CloneInterface):
         self.update(*args, session=session, **pymongo_kwargs)
         return self
 
-    @abstractmethod
-    def _update(self) -> UpdateResult:
-        ...
-
-    def run(
-        self,
-    ) -> Union[UpdateResult, InsertOneResult, Optional["DocType"]]:
-        """
-        Run the query
-        :return:
-        """
-
-        update_result = self._update()
-        if self.upsert_insert_doc is None:
-            return update_result
-        else:
-            if update_result is not None and update_result.matched_count == 0:
-                return self.document_model.insert_one(
-                    document=self.upsert_insert_doc,
-                    session=self.session,
-                    bulk_writer=self.bulk_writer,
-                )
-            else:
-                return update_result
-
-
-class UpdateMany(UpdateQuery):
-    """
-    Update Many query class
-
-    Inherited from:
-
-    - [UpdateQuery](https://roman-right.github.io/bunnet/api/queries/#updatequery)
-    """
-
     def update_many(
         self,
         *args: Mapping[str, Any],
@@ -162,7 +162,7 @@ class UpdateMany(UpdateQuery):
         :param args: *Union[dict, Mapping] - the modifications to apply.
         :param session: Optional[ClientSession]
         :param bulk_writer: "BulkWriter" - bunnet bulk writer
-        :param **pymongo_kwargs: pymongo native parameters for update operation
+        :param pymongo_kwargs: pymongo native parameters for update operation
         :return: UpdateMany query
         """
         return self.update(
@@ -188,21 +188,98 @@ class UpdateMany(UpdateQuery):
                 )
             )
 
+    def run(
+        self,
+    ):
+        """
+        Run the query
+        :return:
+        """
+
+        update_result = self._update()
+        if self.upsert_insert_doc is None:
+            return update_result
+
+        if update_result is not None and update_result.matched_count == 0:
+            return self.document_model.insert_one(
+                document=self.upsert_insert_doc,
+                session=self.session,
+                bulk_writer=self.bulk_writer,
+            )
+
+        return update_result
+
 
 class UpdateOne(UpdateQuery):
     """
     Update One query class
-
-    Inherited from:
-
-    - [UpdateQuery](https://roman-right.github.io/bunnet/api/queries/#updatequery)
     """
+
+    def __init__(self, *args, **kwargs):
+        super(UpdateOne, self).__init__(*args, **kwargs)
+        self.response_type = UpdateResponse.UPDATE_RESULT
+
+    def update(
+        self,
+        *args: Mapping[str, Any],
+        session: Optional[ClientSession] = None,
+        bulk_writer: Optional[BulkWriter] = None,
+        response_type: Optional[UpdateResponse] = None,
+        **pymongo_kwargs,
+    ) -> "UpdateQuery":
+        """
+        Provide modifications to the update query.
+
+        :param args: *Union[dict, Mapping] - the modifications to apply.
+        :param session: Optional[ClientSession]
+        :param bulk_writer: Optional[BulkWriter]
+        :param response_type: UpdateResponse
+        :param pymongo_kwargs: pymongo native parameters for update operation
+        :return: UpdateMany query
+        """
+        self.set_session(session=session)
+        self.update_expressions += args
+        if response_type is not None:
+            self.response_type = response_type
+        if bulk_writer:
+            self.bulk_writer = bulk_writer
+        self.pymongo_kwargs.update(pymongo_kwargs)
+        return self
+
+    def upsert(
+        self,
+        *args: Mapping[str, Any],
+        on_insert: "DocType",
+        session: Optional[ClientSession] = None,
+        response_type: Optional[UpdateResponse] = None,
+        **pymongo_kwargs,
+    ) -> "UpdateQuery":
+        """
+        Provide modifications to the upsert query.
+
+        :param args: *Union[dict, Mapping] - the modifications to apply.
+        :param on_insert: DocType - document to insert if there is no matched
+        document in the collection
+        :param session: Optional[ClientSession]
+        :param response_type: Optional[UpdateResponse]
+        :param pymongo_kwargs: pymongo native parameters for update operation
+        :return: UpdateMany query
+        """
+        self.upsert_insert_doc = on_insert  # type: ignore
+        self.update(
+            *args,
+            response_type=response_type,
+            session=session,
+            **pymongo_kwargs,
+        )
+        return self
 
     def update_one(
         self,
         *args: Mapping[str, Any],
         session: Optional[ClientSession] = None,
         bulk_writer: Optional[BulkWriter] = None,
+        response_type: Optional[UpdateResponse] = None,
         **pymongo_kwargs,
     ):
         """
@@ -211,21 +288,40 @@ class UpdateOne(UpdateQuery):
         :param args: *Union[dict, Mapping] - the modifications to apply.
         :param session: Optional[ClientSession]
         :param bulk_writer: "BulkWriter" - bunnet bulk writer
-        :param **pymongo_kwargs: pymongo native parameters for update operation
+        :param response_type: Optional[UpdateResponse]
+        :param pymongo_kwargs: pymongo native parameters for update operation
         :return: UpdateMany query
         """
         return self.update(
-            *args, session=session, bulk_writer=bulk_writer, **pymongo_kwargs
+            *args,
+            session=session,
+            bulk_writer=bulk_writer,
+            response_type=response_type,
+            **pymongo_kwargs,
         )
 
     def _update(self):
         if not self.bulk_writer:
-            return self.document_model.get_motor_collection().update_one(
-                self.find_query,
-                self.update_query,
-                session=self.session,
-                **self.pymongo_kwargs,
-            )
+            if self.response_type == UpdateResponse.UPDATE_RESULT:
+                return self.document_model.get_motor_collection().update_one(
+                    self.find_query,
+                    self.update_query,
+                    session=self.session,
+                    **self.pymongo_kwargs,
+                )
+            else:
+                result = self.document_model.get_motor_collection().find_one_and_update(
+                    self.find_query,
+                    self.update_query,
+                    session=self.session,
+                    return_document=ReturnDocument.BEFORE
+                    if self.response_type == UpdateResponse.OLD_DOCUMENT
+                    else ReturnDocument.AFTER,
+                    **self.pymongo_kwargs,
+                )
+                if result is not None:
+                    result = parse_obj(self.document_model, result)
+                return result
         else:
             self.bulk_writer.add_operation(
                 Operation(
@@ -236,3 +332,30 @@ class UpdateOne(UpdateQuery):
                     pymongo_kwargs=self.pymongo_kwargs,
                 )
             )
+
+    def run(
+        self,
+    ):
+        """
+        Run the query
+        :return:
+        """
+        update_result = self._update()
+        if self.upsert_insert_doc is None:
+            return update_result
+
+        if (
+            self.response_type == UpdateResponse.UPDATE_RESULT
+            and update_result is not None
+            and update_result.matched_count == 0
+        ) or (
+            self.response_type != UpdateResponse.UPDATE_RESULT
+            and update_result is None
+        ):
+            return self.document_model.insert_one(
+                document=self.upsert_insert_doc,
+                session=self.session,
+                bulk_writer=self.bulk_writer,
+            )
+
+        return update_result

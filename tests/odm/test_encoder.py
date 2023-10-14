@@ -1,13 +1,22 @@
-from datetime import datetime, date
+import re
+from datetime import date, datetime
 
-from bson import Binary
+import pytest
+from bson import Binary, Regex
+from pydantic import AnyUrl
 
 from bunnet.odm.utils.encoder import Encoder
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 from tests.odm.models import (
+    Child,
     DocumentForEncodingTest,
     DocumentForEncodingTestDate,
+    DocumentWithDecimalField,
+    DocumentWithHttpUrlField,
+    DocumentWithKeepNullsFalse,
+    DocumentWithStringField,
+    ModelWithOptionalField,
     SampleWithMutableObjects,
-    Child,
 )
 
 
@@ -28,6 +37,35 @@ def test_encode_date():
     new_doc = DocumentForEncodingTestDate.get(doc.id).run()
     assert new_doc.date_field == doc.date_field
     assert isinstance(new_doc.date_field, date)
+
+
+def test_encode_regex():
+    raw_regex = r"^AA.*CC$"
+    case_sensitive_regex = re.compile(raw_regex)
+    case_insensitive_regex = re.compile(raw_regex, re.I)
+
+    assert isinstance(Encoder().encode(case_sensitive_regex), Regex)
+    assert isinstance(Encoder().encode(case_insensitive_regex), Regex)
+
+    matching_doc = DocumentWithStringField(string_field="AABBCC")
+    ignore_case_matching_doc = DocumentWithStringField(string_field="aabbcc")
+    non_matching_doc = DocumentWithStringField(string_field="abc")
+
+    for doc in (matching_doc, ignore_case_matching_doc, non_matching_doc):
+        doc.insert()
+
+    assert {matching_doc.id, ignore_case_matching_doc.id} == {
+        doc.id
+        for doc in DocumentWithStringField.find(
+            DocumentWithStringField.string_field == case_insensitive_regex
+        )
+    }
+    assert {matching_doc.id} == {
+        doc.id
+        for doc in DocumentWithStringField.find(
+            DocumentWithStringField.string_field == case_sensitive_regex
+        )
+    }
 
 
 def test_encode_with_custom_encoder():
@@ -61,3 +99,56 @@ def test_mutable_objects_on_save():
     instance.save()
     assert isinstance(instance.d["Bar"], Child)
     assert isinstance(instance.lst[0], Child)
+
+
+def test_decimal():
+    test_amts = DocumentWithDecimalField(amt=1, other_amt=2)
+    test_amts.insert()
+    obj = DocumentWithDecimalField.get(test_amts.id).run()
+    assert obj.amt == 1
+    assert obj.other_amt == 2
+
+    test_amts.amt = 6
+    test_amts.save_changes()
+
+    obj = DocumentWithDecimalField.get(test_amts.id).run()
+    assert obj.amt == 6
+
+    test_amts = (DocumentWithDecimalField.find_all().to_list())[0]
+    test_amts.other_amt = 7
+    test_amts.save_changes()
+
+    obj = DocumentWithDecimalField.get(test_amts.id).run()
+    assert obj.other_amt == 7
+
+
+def test_keep_nulls_false():
+    model = ModelWithOptionalField(i=10)
+    doc = DocumentWithKeepNullsFalse(m=model)
+
+    encoder = Encoder(keep_nulls=False, to_db=True)
+    encoded_doc = encoder.encode(doc)
+    assert encoded_doc == {"m": {"i": 10}}
+
+
+@pytest.mark.skipif(not IS_PYDANTIC_V2, reason="Test only for Pydantic v2")
+def test_should_encode_pydantic_v2_url_correctly():
+    url = AnyUrl("https://example.com")
+    encoder = Encoder()
+    encoded_url = encoder.encode(url)
+    assert isinstance(encoded_url, str)
+    # pydantic2 add trailing slash for naked url. see https://github.com/pydantic/pydantic/issues/6943
+    assert encoded_url == "https://example.com/"
+
+
+def test_should_be_able_to_save_retrieve_doc_with_url():
+    doc = DocumentWithHttpUrlField(url_field="https://example.com")
+    assert isinstance(doc.url_field, AnyUrl)
+    doc.save()
+
+    new_doc = DocumentWithHttpUrlField.find_one(
+        DocumentWithHttpUrlField.id == doc.id
+    ).run()
+
+    assert isinstance(new_doc.url_field, AnyUrl)
+    assert new_doc.url_field == doc.url_field

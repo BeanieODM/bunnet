@@ -1,6 +1,12 @@
 import pytest
-from pydantic import BaseSettings
 from pymongo import MongoClient
+
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
+
+if IS_PYDANTIC_V2:
+    from pydantic_settings import BaseSettings
+else:
+    from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):

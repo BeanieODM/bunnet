@@ -1,14 +1,21 @@
-from typing import Dict, Any, List, Optional, Union, Type, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Type, Union
 
 from pydantic import BaseModel, Field
 from pymongo import (
-    InsertOne,
-    DeleteOne,
     DeleteMany,
+    DeleteOne,
+    InsertOne,
     ReplaceOne,
-    UpdateOne,
     UpdateMany,
+    UpdateOne,
 )
+from pymongo.client_session import ClientSession
+from pymongo.results import BulkWriteResult
+
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
+
+if IS_PYDANTIC_V2:
+    from pydantic import ConfigDict
 
 
 class Operation(BaseModel):
@@ -25,13 +32,20 @@ class Operation(BaseModel):
     pymongo_kwargs: Dict[str, Any] = Field(default_factory=dict)
     object_class: Type
 
-    class Config:
-        arbitrary_types_allowed = True
+    if IS_PYDANTIC_V2:
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+        )
+    else:
+
+        class Config:
+            arbitrary_types_allowed = True
 
 
 class BulkWriter:
-    def __init__(self):
+    def __init__(self, session: Optional[ClientSession] = None):
         self.operations: List[Operation] = []
+        self.session = session
 
     def __enter__(self):
         return self
@@ -39,7 +53,11 @@ class BulkWriter:
     def __exit__(self, exc_type, exc, tb):
         self.commit()
 
-    def commit(self):
+    def commit(self) -> Optional[BulkWriteResult]:
+        """
+        Commit all the operations to the database
+        :return:
+        """
         obj_class = None
         requests = []
         if self.operations:
@@ -59,7 +77,10 @@ class BulkWriter:
                     )
                 requests.append(query)
 
-            obj_class.get_motor_collection().bulk_write(requests)  # type: ignore
+            return obj_class.get_motor_collection().bulk_write(  # type: ignore
+                requests, session=self.session
+            )
+        return None
 
     def add_operation(self, operation: Operation):
         self.operations.append(operation)

@@ -1,17 +1,17 @@
 import logging
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from typing import Type, Optional
+from typing import Optional, Type
 
-from bunnet.odm.documents import Document
-from bunnet.odm.utils.init import init_bunnet
 from bunnet.migrations.controllers.iterative import BaseMigrationController
 from bunnet.migrations.database import DBHandler
 from bunnet.migrations.models import (
     MigrationLog,
-    RunningMode,
     RunningDirections,
+    RunningMode,
 )
+from bunnet.odm.documents import Document
+from bunnet.odm.utils.init import init_bunnet
 
 logger = logging.getLogger(__name__)
 

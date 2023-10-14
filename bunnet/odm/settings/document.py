@@ -1,23 +1,14 @@
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import Field
-from pymongo import IndexModel
 
+from bunnet.odm.fields import IndexModelField
 from bunnet.odm.settings.base import ItemSettings
 from bunnet.odm.settings.timeseries import TimeSeriesConfig
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 
-
-class IndexModelField(IndexModel):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if isinstance(v, IndexModel):
-            return v
-        else:
-            return IndexModel(v)
+if IS_PYDANTIC_V2:
+    from pydantic import ConfigDict
 
 
 class DocumentSettings(ItemSettings):
@@ -29,9 +20,18 @@ class DocumentSettings(ItemSettings):
     single_root_inheritance: bool = False
 
     indexes: List[IndexModelField] = Field(default_factory=list)
+    merge_indexes: bool = False
     timeseries: Optional[TimeSeriesConfig] = None
 
     lazy_parsing: bool = False
 
-    class Config:
-        arbitrary_types_allowed = True
+    keep_nulls: bool = True
+
+    if IS_PYDANTIC_V2:
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+        )
+    else:
+
+        class Config:
+            arbitrary_types_allowed = True

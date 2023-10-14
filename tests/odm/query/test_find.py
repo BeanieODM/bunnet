@@ -2,13 +2,13 @@ import datetime
 
 import pytest
 from pydantic import BaseModel
-from pydantic.color import Color
 
 from bunnet.odm.enums import SortDirection
 from tests.odm.models import (
-    Sample,
+    Color,
     DocumentWithBsonEncodersFiledsTypes,
     House,
+    Sample,
 )
 
 
@@ -205,6 +205,18 @@ def test_sort(preset_documents):
     result = Sample.find_many(
         Sample.integer > 1, sort=-Sample.integer
     ).to_list()
+    i_buf = None
+    for a in result:
+        if i_buf is None:
+            i_buf = a.integer
+        assert i_buf >= a.integer
+        i_buf = a.integer
+
+    result = (
+        Sample.find_many(Sample.integer > 1)
+        .sort([Sample.const, -Sample.integer])
+        .to_list()
+    )
     i_buf = None
     for a in result:
         if i_buf is None:

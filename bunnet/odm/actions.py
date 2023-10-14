@@ -1,15 +1,15 @@
 from enum import Enum
 from functools import wraps
 from typing import (
-    Callable,
-    List,
-    Union,
-    Dict,
     TYPE_CHECKING,
     Any,
-    Type,
+    Callable,
+    Dict,
+    List,
     Optional,
     Tuple,
+    Type,
+    Union,
 )
 
 if TYPE_CHECKING:
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 class EventTypes(str, Enum):
     INSERT = "INSERT"
     REPLACE = "REPLACE"
+    SAVE = "SAVE"
     SAVE_CHANGES = "SAVE_CHANGES"
     VALIDATE_ON_SAVE = "VALIDATE_ON_SAVE"
     DELETE = "DELETE"
@@ -27,6 +28,7 @@ class EventTypes(str, Enum):
 
 Insert = EventTypes.INSERT
 Replace = EventTypes.REPLACE
+Save = EventTypes.SAVE
 SaveChanges = EventTypes.SAVE_CHANGES
 ValidateOnSave = EventTypes.VALIDATE_ON_SAVE
 Delete = EventTypes.DELETE
@@ -43,21 +45,20 @@ After = ActionDirections.AFTER
 
 
 class ActionRegistry:
-    _actions: Dict[Type, Any] = {}
-
-    # TODO the real type is
-    #  Dict[str, Dict[EventTypes,Dict[ActionDirections: List[Callable]]]]
-    #  But mypy says it has syntax error inside. Fix it.
+    _actions: Dict[
+        Type["Document"],
+        Dict[EventTypes, Dict[ActionDirections, List[Callable[..., Any]]]],
+    ] = {}
 
     @classmethod
-    def clean_actions(cls, document_class: Type):
+    def clean_actions(cls, document_class: Type["Document"]):
         if cls._actions.get(document_class) is not None:
             del cls._actions[document_class]
 
     @classmethod
     def add_action(
         cls,
-        document_class: Type,
+        document_class: Type["Document"],
         event_types: List[EventTypes],
         action_direction: ActionDirections,
         funct: Callable,
@@ -85,7 +86,7 @@ class ActionRegistry:
     @classmethod
     def get_action_list(
         cls,
-        document_class: Type,
+        document_class: Type["Document"],
         event_type: EventTypes,
         action_direction: ActionDirections,
     ) -> List[Callable]:
@@ -163,10 +164,8 @@ def before_event(*args: Union[List[EventTypes], EventTypes]):
     :param args: Union[List[EventTypes], EventTypes] - event types
     :return: None
     """
-
     return register_action(
-        action_direction=ActionDirections.BEFORE,
-        event_types=args,  # type: ignore
+        action_direction=ActionDirections.BEFORE, event_types=args  # type: ignore
     )
 
 
@@ -180,8 +179,7 @@ def after_event(*args: Union[List[EventTypes], EventTypes]):
     """
 
     return register_action(
-        action_direction=ActionDirections.AFTER,
-        event_types=args,  # type: ignore
+        action_direction=ActionDirections.AFTER, event_types=args  # type: ignore
     )
 
 

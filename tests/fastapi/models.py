@@ -1,6 +1,6 @@
 from typing import List
 
-from bunnet import Document, Link, Indexed
+from bunnet import Document, Indexed, Link
 
 
 class WindowAPI(Document):

@@ -2,7 +2,11 @@ import pytest
 from pymongo.errors import DuplicateKeyError
 
 from bunnet.odm.fields import PydanticObjectId
-from tests.odm.models import DocumentTestModel
+from tests.odm.models import (
+    DocumentTestModel,
+    DocumentWithKeepNullsFalse,
+    ModelWithOptionalField,
+)
 
 
 def test_insert_one(document_not_inserted):
@@ -51,3 +55,58 @@ def test_insert_many_with_session(documents_not_inserted, session):
 def test_create_with_session(document_not_inserted, session):
     document_not_inserted.insert(session=session)
     assert isinstance(document_not_inserted.id, PydanticObjectId)
+
+
+def test_insert_keep_nulls_false():
+    model = ModelWithOptionalField(i=10)
+    doc = DocumentWithKeepNullsFalse(m=model)
+
+    doc.insert()
+
+    new_doc = DocumentWithKeepNullsFalse.get(doc.id).run()
+
+    assert new_doc.m.i == 10
+    assert new_doc.m.s is None
+    assert new_doc.o is None
+
+    raw_data = DocumentWithKeepNullsFalse.get_motor_collection().find_one(
+        {"_id": doc.id}
+    )
+    assert raw_data == {
+        "_id": doc.id,
+        "m": {"i": 10},
+    }
+
+
+def test_insert_many_keep_nulls_false():
+    models = [ModelWithOptionalField(i=10), ModelWithOptionalField(i=11)]
+    docs = [DocumentWithKeepNullsFalse(m=m) for m in models]
+
+    DocumentWithKeepNullsFalse.insert_many(docs)
+
+    new_docs = DocumentWithKeepNullsFalse.find_all().to_list()
+
+    assert len(new_docs) == 2
+
+    assert new_docs[0].m.i == 10
+    assert new_docs[0].m.s is None
+    assert new_docs[0].o is None
+
+    assert new_docs[1].m.i == 11
+    assert new_docs[1].m.s is None
+    assert new_docs[1].o is None
+
+    raw_data = DocumentWithKeepNullsFalse.get_motor_collection().find_one(
+        {"_id": new_docs[0].id}
+    )
+    assert raw_data == {
+        "_id": new_docs[0].id,
+        "m": {"i": 10},
+    }
+    raw_data = DocumentWithKeepNullsFalse.get_motor_collection().find_one(
+        {"_id": new_docs[1].id}
+    )
+    assert raw_data == {
+        "_id": new_docs[1].id,
+        "m": {"i": 11},
+    }

@@ -1,8 +1,8 @@
 from inspect import signature
-from typing import Type, List
+from typing import List, Type
 
-from bunnet.odm.documents import Document
 from bunnet.migrations.controllers.base import BaseMigrationController
+from bunnet.odm.documents import Document
 
 
 def free_fall_migration(document_models: List[Type[Document]]):

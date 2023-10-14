@@ -1,64 +1,76 @@
-import pytest
+from typing import List
 
+import pytest
+from pydantic.fields import Field
+
+from bunnet import Document, init_bunnet
 from bunnet.exceptions import DocumentWasNotSaved
-from bunnet.odm.fields import DeleteRules, Link, WriteRules
+from bunnet.odm.fields import BackLink, DeleteRules, Link, WriteRules
+from bunnet.odm.utils.pydantic import (
+    IS_PYDANTIC_V2,
+    get_model_fields,
+    parse_model,
+)
 from tests.odm.models import (
-    Door,
-    House,
-    Lock,
-    Roof,
-    Window,
-    Yard,
-    RootDocument,
+    AddressView,
     ADocument,
     BDocument,
-    UsersAddresses,
-    Region,
-    AddressView,
-    SelfLinked,
+    DocumentToBeLinked,
+    DocumentWithBackLink,
+    DocumentWithLink,
+    DocumentWithListBackLink,
+    DocumentWithListLink,
+    DocumentWithListOfLinks,
+    DocumentWithTextIndexAndLink,
+    Door,
+    House,
+    LinkDocumentForTextSeacrh,
+    Lock,
     LoopedLinksA,
     LoopedLinksB,
+    Region,
+    Roof,
+    RootDocument,
+    SelfLinked,
+    UsersAddresses,
+    Window,
+    Yard,
 )
 
 
-@pytest.fixture
-def lock_not_inserted():
+def lock_not_inserted_fn():
     return Lock(k=10)
 
 
 @pytest.fixture
 def locks_not_inserted():
-    return [Lock(k=10), Lock(k=11)]
+    return [Lock(k=10001), Lock(k=20002)]
 
 
 @pytest.fixture
-def window_not_inserted(lock_not_inserted):
-    return Window(x=10, y=10, lock=lock_not_inserted)
+def window_not_inserted():
+    return Window(x=10, y=10, lock=lock_not_inserted_fn())
 
 
 @pytest.fixture
-def windows_not_inserted(lock_not_inserted):
+def windows_not_inserted():
     return [
         Window(
             x=10,
             y=10,
-            lock=lock_not_inserted,
+            lock=lock_not_inserted_fn(),
         ),
         Window(
             x=11,
             y=11,
-            lock=lock_not_inserted,
+            lock=lock_not_inserted_fn(),
         ),
     ]
 
 
 @pytest.fixture
-def door_not_inserted(locks_not_inserted, window_not_inserted):
-    return Door(
-        t=10,
-        window=window_not_inserted,
-        locks=locks_not_inserted,
-    )
+def door_not_inserted(window_not_inserted, locks_not_inserted):
+    return Door(t=10, window=window_not_inserted, locks=locks_not_inserted)
 
 
 @pytest.fixture
@@ -125,7 +137,6 @@ class TestInsert:
         house_not_inserted,
         door_not_inserted,
         window_not_inserted,
-        lock_not_inserted,
         locks_not_inserted,
     ):
         lock_links = []
@@ -135,7 +146,7 @@ class TestInsert:
             lock_links.append(link)
         door_not_inserted.locks = lock_links
 
-        door_window_lock = lock_not_inserted.insert()
+        door_window_lock = lock_not_inserted_fn().insert()
         door_window_lock_link = Lock.link_from_id(door_window_lock.id)
         window_not_inserted.lock = door_window_lock_link
 
@@ -147,9 +158,12 @@ class TestInsert:
         door_link = Door.link_from_id(door.id)
         house_not_inserted.door = door_link
 
-        house = House.parse_obj(house_not_inserted)
+        house = parse_model(House, house_not_inserted)
         house.insert(link_rule=WriteRules.WRITE)
-        house.json()
+        if IS_PYDANTIC_V2:
+            house.model_dump_json()
+        else:
+            house.json()
 
     def test_multi_insert_links(self):
         house = House(name="random", windows=[], door=Door())
@@ -160,10 +174,13 @@ class TestInsert:
         house = house.insert(link_rule=WriteRules.WRITE)
         new_window = Window(x=11, y=22)
         house.windows.append(new_window)
-        house = house.save(link_rule=WriteRules.WRITE)
+        house.save(link_rule=WriteRules.WRITE)
         for win in house.windows:
             assert isinstance(win, Window)
             assert win.id
+
+    def test_fetch_after_insert(self, house_not_inserted):
+        house_not_inserted.fetch_all_links()
 
 
 class TestFind:
@@ -224,6 +241,13 @@ class TestFind:
 
         assert len(houses) == 3
 
+    def test_prefect_count(self, houses):
+        c = House.find(House.door.t > 5, fetch_links=True).count()
+        assert c == 3
+
+        c = House.find_one(House.door.t > 5, fetch_links=True).count()
+        assert c == 3
+
     def test_prefetch_find_one(self, house):
         house = House.find_one(House.name == "test").run()
         for window in house.windows:
@@ -232,7 +256,6 @@ class TestFind:
 
         house = House.find_one(House.name == "test", fetch_links=True).run()
         for window in house.windows:
-            print(window, type(window))
             assert isinstance(window, Window)
         assert isinstance(house.door, Door)
 
@@ -285,6 +308,48 @@ class TestFind:
         ).run()
         assert house_1 is not None
         assert house_2 is not None
+
+    def test_fetch_list_with_some_prefetched(self):
+        docs = []
+        for i in range(10):
+            doc = DocumentToBeLinked()
+            doc.save()
+            docs.append(doc)
+
+        doc_with_links = DocumentWithListOfLinks(links=docs)
+        doc_with_links.save()
+
+        doc_with_links = DocumentWithListOfLinks.get(
+            doc_with_links.id, fetch_links=False
+        ).run()
+        doc_with_links.links[-1] = doc_with_links.links[-1].fetch()
+
+        doc_with_links.fetch_all_links()
+
+        for link in doc_with_links.links:
+            assert isinstance(link, DocumentToBeLinked)
+
+        assert len(doc_with_links.links) == 10
+
+        # test order
+        for i in range(10):
+            assert doc_with_links.links[i].id == docs[i].id
+
+    def test_text_search(self):
+        doc = DocumentWithTextIndexAndLink(
+            s="hello world", link=LinkDocumentForTextSeacrh(i=1)
+        )
+        doc.insert(link_rule=WriteRules.WRITE)
+
+        doc2 = DocumentWithTextIndexAndLink(
+            s="hi world", link=LinkDocumentForTextSeacrh(i=2)
+        )
+        doc2.insert(link_rule=WriteRules.WRITE)
+
+        docs = DocumentWithTextIndexAndLink.find(
+            {"$text": {"$search": "hello"}}, fetch_links=True
+        ).to_list()
+        assert len(docs) == 1
 
 
 class TestReplace:
@@ -349,19 +414,19 @@ class TestOther:
     def test_query_composition(self):
         SYS = {"id", "revision_id"}
 
-        # Simple fields are initialized using the pydantic __fields__ internal property
+        # Simple fields are initialized using the pydantic model_fields internal property
         # such fields are properly isolated when multi inheritance is involved.
-        assert set(RootDocument.__fields__.keys()) == SYS | {
+        assert set(get_model_fields(RootDocument).keys()) == SYS | {
             "name",
             "link_root",
         }
-        assert set(ADocument.__fields__.keys()) == SYS | {
+        assert set(get_model_fields(ADocument).keys()) == SYS | {
             "name",
             "link_root",
             "surname",
             "link_a",
         }
-        assert set(BDocument.__fields__.keys()) == SYS | {
+        assert set(get_model_fields(BDocument).keys()) == SYS | {
             "name",
             "link_root",
             "email",
@@ -419,3 +484,276 @@ class TestOther:
         assert isinstance(res.b.a, LoopedLinksA)
         assert isinstance(res.b.a.b, LoopedLinksB)
         assert res.b.a.b.a is None
+
+    def test_with_chaining_aggregation(self):
+        region = Region()
+        region.insert()
+
+        for i in range(10):
+            UsersAddresses(region_id=region).insert()
+
+        region_2 = Region()
+        region_2.insert()
+
+        for i in range(10):
+            UsersAddresses(region_id=region_2).insert()
+
+        addresses_count = (
+            UsersAddresses.find(
+                UsersAddresses.region_id.id == region.id, fetch_links=True
+            )
+            .aggregate([{"$count": "count"}])
+            .to_list()
+        )
+
+        assert addresses_count[0] == {"count": 10}
+
+    def test_with_extra_allow(self, houses):
+        res = House.find(fetch_links=True).to_list()
+        assert get_model_fields(res[0]).keys() == {
+            "id",
+            "revision_id",
+            "windows",
+            "door",
+            "roof",
+            "yards",
+            "name",
+            "height",
+        }
+
+        res = House.find_one(fetch_links=True).run()
+        assert get_model_fields(res).keys() == {
+            "id",
+            "revision_id",
+            "windows",
+            "door",
+            "roof",
+            "yards",
+            "name",
+            "height",
+        }
+
+
+@pytest.fixture()
+def link_and_backlink_doc_pair():
+    back_link_doc = DocumentWithBackLink()
+    back_link_doc.insert()
+    link_doc = DocumentWithLink(link=back_link_doc)
+    link_doc.insert()
+    return link_doc, back_link_doc
+
+
+@pytest.fixture()
+def list_link_and_list_backlink_doc_pair():
+    back_link_doc = DocumentWithListBackLink()
+    back_link_doc.insert()
+    link_doc = DocumentWithListLink(link=[back_link_doc])
+    link_doc.insert()
+    return link_doc, back_link_doc
+
+
+class TestFindBackLinks:
+    def test_prefetch_direct(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert back_link_doc.back_link.id == link_doc.id
+        assert back_link_doc.back_link.link.id == back_link_doc.id
+
+    def test_prefetch_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert back_link_doc.back_link[0].id == link_doc.id
+        assert back_link_doc.back_link[0].link[0].id == back_link_doc.id
+
+
+class TestReplaceBackLinks:
+    def test_do_nothing(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc.back_link.s = "new value"
+        back_link_doc.replace()
+        new_back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert new_back_link_doc.back_link.s == "TEST"
+
+    def test_do_nothing_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in back_link_doc.back_link:
+            lnk.s = "new value"
+        back_link_doc.replace()
+        new_back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in new_back_link_doc.back_link:
+            assert lnk.s == "TEST"
+
+    def test_write(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.back_link.s = "new value"
+        back_link_doc.replace(link_rule=WriteRules.WRITE)
+        new_back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert new_back_link_doc.back_link.s == "new value"
+
+    def test_do_nothing_write_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in back_link_doc.back_link:
+            lnk.s = "new value"
+        back_link_doc.replace(link_rule=WriteRules.WRITE)
+        new_back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in new_back_link_doc.back_link:
+            assert lnk.s == "new value"
+
+
+class TestSaveBackLinks:
+    def test_do_nothing(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc.back_link.s = "new value"
+        back_link_doc.save()
+        new_back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert new_back_link_doc.back_link.s == "TEST"
+
+    def test_do_nothing_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in back_link_doc.back_link:
+            lnk.s = "new value"
+        back_link_doc.save()
+        new_back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in new_back_link_doc.back_link:
+            assert lnk.s == "TEST"
+
+    def test_write(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.back_link.s = "new value"
+        back_link_doc.save(link_rule=WriteRules.WRITE)
+        new_back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert new_back_link_doc.back_link.s == "new value"
+
+    def test_write_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in back_link_doc.back_link:
+            lnk.s = "new value"
+        back_link_doc.save(link_rule=WriteRules.WRITE)
+        new_back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        for lnk in new_back_link_doc.back_link:
+            assert lnk.s == "new value"
+
+
+class HouseForReversedOrderInit(Document):
+    name: str
+    door: Link["DoorForReversedOrderInit"]
+    owners: List[Link["PersonForReversedOrderInit"]]
+
+
+class DoorForReversedOrderInit(Document):
+    height: int = 2
+    width: int = 1
+    if IS_PYDANTIC_V2:
+        house: BackLink[HouseForReversedOrderInit] = Field(
+            json_schema_extra={"original_field": "door"}
+        )
+    else:
+        house: BackLink[HouseForReversedOrderInit] = Field(
+            original_field="door"
+        )
+
+
+class PersonForReversedOrderInit(Document):
+    name: str
+    if IS_PYDANTIC_V2:
+        house: List[BackLink[HouseForReversedOrderInit]] = Field(
+            json_schema_extra={"original_field": "owners"}
+        )
+    else:
+        house: List[BackLink[HouseForReversedOrderInit]] = Field(
+            original_field="owners"
+        )
+
+
+class TestDeleteBackLinks:
+    def test_do_nothing(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.delete()
+        new_link_doc = DocumentWithLink.get(
+            link_doc.id, fetch_links=True
+        ).run()
+        assert new_link_doc is not None
+
+    def test_do_nothing_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.delete()
+        new_link_doc = DocumentWithListLink.get(
+            link_doc.id, fetch_links=True
+        ).run()
+        assert new_link_doc is not None
+
+    def test_delete_links(self, link_and_backlink_doc_pair):
+        link_doc, back_link_doc = link_and_backlink_doc_pair
+        back_link_doc = DocumentWithBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.delete(link_rule=DeleteRules.DELETE_LINKS)
+        new_link_doc = DocumentWithLink.get(
+            link_doc.id, fetch_links=True
+        ).run()
+        assert new_link_doc is None
+
+    def test_delete_links_list(self, list_link_and_list_backlink_doc_pair):
+        link_doc, back_link_doc = list_link_and_list_backlink_doc_pair
+        back_link_doc = DocumentWithListBackLink.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        back_link_doc.delete(link_rule=DeleteRules.DELETE_LINKS)
+        new_link_doc = DocumentWithListLink.get(
+            link_doc.id, fetch_links=True
+        ).run()
+        assert new_link_doc is None
+
+    def test_init_reversed_order(self, db):
+        init_bunnet(
+            database=db,
+            document_models=[
+                DoorForReversedOrderInit,
+                HouseForReversedOrderInit,
+                PersonForReversedOrderInit,
+            ],
+        )

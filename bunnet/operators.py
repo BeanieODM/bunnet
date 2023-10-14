@@ -6,14 +6,14 @@ from bunnet.odm.operators.find.bitwise import (
     BitsAnySet,
 )
 from bunnet.odm.operators.find.comparison import (
-    Eq,
     GT,
     GTE,
-    In,
-    NotIn,
     LT,
     LTE,
     NE,
+    Eq,
+    In,
+    NotIn,
 )
 from bunnet.odm.operators.find.element import Exists, Type
 from bunnet.odm.operators.find.evaluation import (
@@ -25,29 +25,30 @@ from bunnet.odm.operators.find.evaluation import (
     Where,
 )
 from bunnet.odm.operators.find.geospatial import (
+    Box,
     GeoIntersects,
-    GeoWithinTypes,
     GeoWithin,
+    GeoWithinTypes,
     Near,
     NearSphere,
 )
-from bunnet.odm.operators.find.logical import Or, And, Nor, Not
+from bunnet.odm.operators.find.logical import And, Nor, Not, Or
 from bunnet.odm.operators.update.array import (
     AddToSet,
     Pop,
     Pull,
-    Push,
     PullAll,
+    Push,
 )
 from bunnet.odm.operators.update.bitwise import Bit
 from bunnet.odm.operators.update.general import (
-    Set,
     CurrentDate,
     Inc,
-    Min,
     Max,
+    Min,
     Mul,
     Rename,
+    Set,
     SetOnInsert,
     Unset,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "GeoIntersects",
     "GeoWithinTypes",
     "GeoWithin",
+    "Box",
     "Near",
     "NearSphere",
     # Logical

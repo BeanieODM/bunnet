@@ -1,6 +1,5 @@
-import inspect
 from functools import wraps
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from bunnet.exceptions import StateManagementIsTurnedOff, StateNotSaved
 
@@ -23,13 +22,6 @@ def saved_state_needed(f: Callable):
         check_if_state_saved(self)
         return f(self, *args, **kwargs)
 
-    @wraps(f)
-    async def async_wrapper(self: "DocType", *args, **kwargs):
-        check_if_state_saved(self)
-        return await f(self, *args, **kwargs)
-
-    if inspect.iscoroutinefunction(f):
-        return async_wrapper
     return sync_wrapper
 
 
@@ -50,13 +42,6 @@ def previous_saved_state_needed(f: Callable):
         check_if_previous_state_saved(self)
         return f(self, *args, **kwargs)
 
-    @wraps(f)
-    async def async_wrapper(self: "DocType", *args, **kwargs):
-        check_if_previous_state_saved(self)
-        return await f(self, *args, **kwargs)
-
-    if inspect.iscoroutinefunction(f):
-        return async_wrapper
     return sync_wrapper
 
 
