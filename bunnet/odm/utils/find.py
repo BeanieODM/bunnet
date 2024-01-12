@@ -49,7 +49,7 @@ def construct_query(
                     }
                 },
                 {
-                    "$set": {
+                    "$addFields": {
                         link_info.field_name: {
                             "$cond": {
                                 "if": {
@@ -64,7 +64,7 @@ def construct_query(
                         }
                     }
                 },
-                {"$unset": f"_link_{link_info.field_name}"},
+                {"$project": {f"_link_{link_info.field_name}": 0}},
             ]  # type: ignore
             if link_info.nested_links is not None:
                 lookup_steps[0]["$lookup"]["pipeline"] = []  # type: ignore
@@ -101,7 +101,7 @@ def construct_query(
                     }
                 },
                 {
-                    "$set": {
+                    "$addFields": {
                         link_info.field_name: {
                             "$cond": {
                                 "if": {
@@ -116,7 +116,7 @@ def construct_query(
                         }
                     }
                 },
-                {"$unset": f"_link_{link_info.field_name}"},
+                {"$project": {f"_link_{link_info.field_name}": 0}},
             ]
             for nested_link in link_info.nested_links:
                 construct_query(
@@ -147,7 +147,7 @@ def construct_query(
                     }
                 },
                 {
-                    "$set": {
+                    "$addFields": {
                         link_info.field_name: {
                             "$cond": {
                                 "if": {
@@ -162,7 +162,7 @@ def construct_query(
                         }
                     }
                 },
-                {"$unset": f"_link_{link_info.field_name}"},
+                {"$project": {f"_link_{link_info.field_name}": 0}},
             ]  # type: ignore
             if link_info.nested_links is not None:
                 lookup_steps[0]["$lookup"]["pipeline"] = []  # type: ignore
@@ -202,7 +202,7 @@ def construct_query(
                     }
                 },
                 {
-                    "$set": {
+                    "$addFields": {
                         link_info.field_name: {
                             "$cond": {
                                 "if": {
@@ -217,7 +217,7 @@ def construct_query(
                         }
                     }
                 },
-                {"$unset": f"_link_{link_info.field_name}"},
+                {"$project": {f"_link_{link_info.field_name}": 0}},
             ]
             for nested_link in link_info.nested_links:
                 construct_query(
