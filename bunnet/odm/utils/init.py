@@ -5,10 +5,10 @@ from pymongo.database import Database
 from bunnet.odm.utils.pydantic import (
     IS_PYDANTIC_V2,
     get_extra_field_info,
-    get_field_type,
     get_model_fields,
     parse_model,
 )
+from bunnet.odm.utils.typing import get_index_attributes
 
 if sys.version_info >= (3, 8):
     from typing import get_args, get_origin
@@ -17,7 +17,6 @@ else:
 
 import importlib
 import inspect
-from copy import copy
 from typing import (  # type: ignore
     List,
     Optional,
@@ -65,6 +64,7 @@ class Initializer:
         ] = None,
         allow_index_dropping: bool = False,
         recreate_views: bool = False,
+        multiprocessing_mode: bool = False,
     ):
         """
         Bunnet initializer
@@ -75,8 +75,12 @@ class Initializer:
         or strings with dot separated paths
         :param allow_index_dropping: bool - if index dropping is allowed.
         Default False
+        :param recreate_views: bool - if views should be recreated. Default False
+        :param multiprocessing_mode: bool - if multiprocessing mode is on
+        it will patch the motor client to use process's event loop.
         :return: None
         """
+
         self.inited_classes: List[Type] = []
         self.allow_index_dropping = allow_index_dropping
         self.recreate_views = recreate_views
@@ -302,6 +306,22 @@ class Initializer:
                         )
         return None
 
+    def check_nested_links(self, link_info: LinkInfo, current_depth: int):
+        if current_depth == 1:
+            return
+        for k, v in get_model_fields(link_info.document_class).items():
+            nested_link_info = self.detect_link(v, k)
+            if nested_link_info is None:
+                continue
+
+            if link_info.nested_links is None:
+                link_info.nested_links = {}
+            link_info.nested_links[k] = nested_link_info
+            new_depth = (
+                current_depth - 1 if current_depth is not None else None
+            )
+            self.check_nested_links(nested_link_info, current_depth=new_depth)
+
     # Document
 
     @staticmethod
@@ -340,27 +360,6 @@ class Initializer:
         if not IS_PYDANTIC_V2:
             self.update_forward_refs(cls)
 
-        def check_nested_links(
-            link_info: LinkInfo, prev_models: List[Type[BaseModel]]
-        ):
-            if link_info.document_class in prev_models:
-                return
-            if not IS_PYDANTIC_V2:
-                self.update_forward_refs(link_info.document_class)
-            for k, v in get_model_fields(link_info.document_class).items():
-                nested_link_info = self.detect_link(v, k)
-                if nested_link_info is None:
-                    continue
-
-                if link_info.nested_links is None:
-                    link_info.nested_links = {}
-                link_info.nested_links[k] = nested_link_info
-                new_prev_models = copy(prev_models)
-                new_prev_models.append(link_info.document_class)
-                check_nested_links(
-                    nested_link_info, prev_models=new_prev_models
-                )
-
         if cls._link_fields is None:
             cls._link_fields = {}
         for k, v in get_model_fields(cls).items():
@@ -368,11 +367,22 @@ class Initializer:
             setattr(cls, k, ExpressionField(path))
 
             link_info = self.detect_link(v, k)
+            depth_level = cls.get_settings().max_nesting_depths_per_field.get(
+                k, None
+            )
+            if depth_level is None:
+                depth_level = cls.get_settings().max_nesting_depth
             if link_info is not None:
-                cls._link_fields[k] = link_info
-                check_nested_links(link_info, prev_models=[])
+                if depth_level > 0 or depth_level is None:
+                    cls._link_fields[k] = link_info
+                    self.check_nested_links(
+                        link_info, current_depth=depth_level
+                    )
+                elif depth_level <= 0:
+                    link_info.is_fetchable = False
+                    cls._link_fields[k] = link_info
 
-        cls._hidden_fields = cls.get_hidden_fields()
+        cls.check_hidden_fields()
 
     @staticmethod
     def init_actions(cls):
@@ -457,21 +467,24 @@ class Initializer:
         new_indexes = []
 
         # Indexed field wrapped with Indexed()
+        indexed_fields = (
+            (k, fvalue, get_index_attributes(fvalue))
+            for k, fvalue in get_model_fields(cls).items()
+        )
         found_indexes = [
             IndexModelField(
                 IndexModel(
                     [
                         (
                             fvalue.alias or k,
-                            fvalue.annotation._indexed[0],
+                            indexed_attrs[0],
                         )
                     ],
-                    **fvalue.annotation._indexed[1],
+                    **indexed_attrs[1],
                 )
             )
-            for k, fvalue in get_model_fields(cls).items()
-            if hasattr(get_field_type(fvalue), "_indexed")
-            and get_field_type(fvalue)._indexed
+            for k, fvalue, indexed_attrs in indexed_fields
+            if indexed_attrs is not None
         ]
 
         if document_settings.merge_indexes:
@@ -582,35 +595,26 @@ class Initializer:
         :return: None
         """
 
-        def check_nested_links(
-            link_info: LinkInfo, prev_models: List[Type[BaseModel]]
-        ):
-            if link_info.document_class in prev_models:
-                return
-            for k, v in get_model_fields(link_info.document_class).items():
-                nested_link_info = self.detect_link(v, k)
-                if nested_link_info is None:
-                    continue
-
-                if link_info.nested_links is None:
-                    link_info.nested_links = {}
-                link_info.nested_links[k] = nested_link_info
-                new_prev_models = copy(prev_models)
-                new_prev_models.append(link_info.document_class)
-                check_nested_links(
-                    nested_link_info, prev_models=new_prev_models
-                )
-
         if cls._link_fields is None:
             cls._link_fields = {}
         for k, v in get_model_fields(cls).items():
             path = v.alias or k
             setattr(cls, k, ExpressionField(path))
-
             link_info = self.detect_link(v, k)
+            depth_level = cls.get_settings().max_nesting_depths_per_field.get(
+                k, None
+            )
+            if depth_level is None:
+                depth_level = cls.get_settings().max_nesting_depth
             if link_info is not None:
-                cls._link_fields[k] = link_info
-                check_nested_links(link_info, prev_models=[])
+                if depth_level > 0:
+                    cls._link_fields[k] = link_info
+                    self.check_nested_links(
+                        link_info, current_depth=depth_level
+                    )
+                elif depth_level <= 0:
+                    link_info.is_fetchable = False
+                    cls._link_fields[k] = link_info
 
     def init_view_collection(self, cls):
         """
@@ -721,6 +725,7 @@ def init_bunnet(
     ] = None,
     allow_index_dropping: bool = False,
     recreate_views: bool = False,
+    multiprocessing_mode: bool = False,
 ):
     """
     Beanie initialization
@@ -731,6 +736,9 @@ def init_bunnet(
     or strings with dot separated paths
     :param allow_index_dropping: bool - if index dropping is allowed.
     Default False
+    :param recreate_views: bool - if views should be recreated. Default False
+    :param multiprocessing_mode: bool - if multiprocessing mode is on
+        it will patch the motor client to use process's event loop. Default False
     :return: None
     """
 
@@ -740,4 +748,5 @@ def init_bunnet(
         document_models=document_models,
         allow_index_dropping=allow_index_dropping,
         recreate_views=recreate_views,
+        multiprocessing_mode=multiprocessing_mode,
     ).run()

@@ -1,7 +1,10 @@
 import logging
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from typing import Optional, Type
+from typing import List, Optional, Type
+
+from pymongo.client_session import ClientSession
+from pymongo.database import Database
 
 from bunnet.migrations.controllers.iterative import BaseMigrationController
 from bunnet.migrations.database import DBHandler
@@ -55,7 +58,12 @@ class MigrationNode:
         self.clean_current_migration()
         MigrationLog(is_current=True, name=self.name).insert()
 
-    def run(self, mode: RunningMode, allow_index_dropping: bool):
+    def run(
+        self,
+        mode: RunningMode,
+        allow_index_dropping: bool,
+        use_transaction: bool,
+    ):
         """
         Migrate
 
@@ -71,7 +79,8 @@ class MigrationNode:
                 logger.info("Running migrations forward without limit")
                 while True:
                     migration_node.run_forward(
-                        allow_index_dropping=allow_index_dropping
+                        allow_index_dropping=allow_index_dropping,
+                        use_transaction=use_transaction,
                     )
                     migration_node = migration_node.next_migration
                     if migration_node is None:
@@ -80,7 +89,8 @@ class MigrationNode:
                 logger.info(f"Running {mode.distance} migrations forward")
                 for i in range(mode.distance):
                     migration_node.run_forward(
-                        allow_index_dropping=allow_index_dropping
+                        allow_index_dropping=allow_index_dropping,
+                        use_transaction=use_transaction,
                     )
                     migration_node = migration_node.next_migration
                     if migration_node is None:
@@ -91,7 +101,8 @@ class MigrationNode:
                 logger.info("Running migrations backward without limit")
                 while True:
                     migration_node.run_backward(
-                        allow_index_dropping=allow_index_dropping
+                        allow_index_dropping=allow_index_dropping,
+                        use_transaction=use_transaction,
                     )
                     migration_node = migration_node.prev_migration
                     if migration_node is None:
@@ -100,30 +111,37 @@ class MigrationNode:
                 logger.info(f"Running {mode.distance} migrations backward")
                 for i in range(mode.distance):
                     migration_node.run_backward(
-                        allow_index_dropping=allow_index_dropping
+                        allow_index_dropping=allow_index_dropping,
+                        use_transaction=use_transaction,
                     )
                     migration_node = migration_node.prev_migration
                     if migration_node is None:
                         break
 
-    def run_forward(self, allow_index_dropping):
+    def run_forward(self, allow_index_dropping: bool, use_transaction: bool):
         if self.forward_class is not None:
             self.run_migration_class(
-                self.forward_class, allow_index_dropping=allow_index_dropping
+                self.forward_class,
+                allow_index_dropping=allow_index_dropping,
+                use_transaction=use_transaction,
             )
         self.update_current_migration()
 
-    def run_backward(self, allow_index_dropping):
+    def run_backward(self, allow_index_dropping: bool, use_transaction: bool):
         if self.backward_class is not None:
             self.run_migration_class(
-                self.backward_class, allow_index_dropping=allow_index_dropping
+                self.backward_class,
+                allow_index_dropping=allow_index_dropping,
+                use_transaction=use_transaction,
             )
         if self.prev_migration is not None:
             self.prev_migration.update_current_migration()
         else:
             self.clean_current_migration()
 
-    def run_migration_class(self, cls: Type, allow_index_dropping: bool):
+    def run_migration_class(
+        self, cls: Type, allow_index_dropping: bool, use_transaction: bool
+    ):
         """
         Run Backward or Forward migration class
 
@@ -142,19 +160,33 @@ class MigrationNode:
         if client is None:
             raise RuntimeError("client must not be None")
         with client.start_session() as s:
-            with s.start_transaction():
-                for migration in migrations:
-                    for model in migration.models:
-                        init_bunnet(
-                            database=db,
-                            document_models=[model],  # type: ignore
-                            allow_index_dropping=allow_index_dropping,
-                        )  # TODO this is slow
-                    logger.info(
-                        f"Running migration {migration.function.__name__} "
-                        f"from module {self.name}"
+            if use_transaction:
+                with s.start_transaction():
+                    self.run_migrations(
+                        migrations, db, allow_index_dropping, s
                     )
-                    migration.run(session=s)
+            else:
+                self.run_migrations(migrations, db, allow_index_dropping, s)
+
+    def run_migrations(
+        self,
+        migrations: List[BaseMigrationController],
+        db: Database,
+        allow_index_dropping: bool,
+        session: ClientSession,
+    ) -> None:
+        for migration in migrations:
+            for model in migration.models:
+                init_bunnet(
+                    database=db,
+                    document_models=[model],  # type: ignore
+                    allow_index_dropping=allow_index_dropping,
+                )  # TODO this is slow
+            logger.info(
+                f"Running migration {migration.function.__name__} "
+                f"from module {self.name}"
+            )
+            migration.run(session=session)
 
     @classmethod
     def build(cls, path: Path):

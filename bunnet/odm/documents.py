@@ -1,6 +1,6 @@
+import warnings
+from enum import Enum
 from typing import (
-    TYPE_CHECKING,
-    AbstractSet,
     Any,
     ClassVar,
     Dict,
@@ -8,7 +8,6 @@ from typing import (
     List,
     Mapping,
     Optional,
-    Set,
     Type,
     TypeVar,
     Union,
@@ -82,7 +81,7 @@ from bunnet.odm.operators.update.general import (
 from bunnet.odm.queries.update import UpdateMany, UpdateResponse
 from bunnet.odm.settings.document import DocumentSettings
 from bunnet.odm.utils.dump import get_dict, get_top_level_nones
-from bunnet.odm.utils.parsing import merge_models
+from bunnet.odm.utils.parsing import apply_changes, merge_models
 from bunnet.odm.utils.pydantic import (
     IS_PYDANTIC_V2,
     get_extra_field_info,
@@ -97,32 +96,39 @@ from bunnet.odm.utils.state import (
     previous_saved_state_needed,
     save_state_after,
     saved_state_needed,
-    swap_revision_after,
 )
 from bunnet.odm.utils.typing import extract_id_class
 
 if IS_PYDANTIC_V2:
     from pydantic import model_validator
 
-if TYPE_CHECKING:
-    from pydantic.typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
-
 DocType = TypeVar("DocType", bound="Document")
 DocumentProjectionType = TypeVar("DocumentProjectionType", bound=BaseModel)
 
 
 def json_schema_extra(schema: Dict[str, Any], model: Type["Document"]) -> None:
-    props = {}
-    for k, v in schema.get("properties", {}).items():
-        if not v.get("hidden", False):
-            props[k] = v
-    schema["properties"] = props
+    # remove excluded fields from the json schema
+    properties = schema.get("properties")
+    if not properties:
+        return
+    for k, field in get_model_fields(model).items():
+        k = field.alias or k
+        if k not in properties:
+            continue
+        field_info = field if IS_PYDANTIC_V2 else field.field_info
+        if field_info.exclude:
+            del properties[k]
 
 
 def document_alias_generator(s: str) -> str:
     if s == "id":
         return "_id"
     return s
+
+
+class MergeStrategy(str, Enum):
+    local = "local"
+    remote = "remote"
 
 
 class Document(
@@ -151,34 +157,17 @@ class Document(
     else:
 
         class Config:
-            json_encoders = {
-                ObjectId: lambda v: str(v),
-            }
+            json_encoders = {ObjectId: str}
             allow_population_by_field_name = True
             fields = {"id": "_id"}
-
-            @staticmethod
-            def schema_extra(
-                schema: Dict[str, Any], model: Type["Document"]
-            ) -> None:
-                props = {}
-                for k, v in schema.get("properties", {}).items():
-                    if not v.get("hidden", False):
-                        props[k] = v
-                schema["properties"] = props
+            schema_extra = staticmethod(json_schema_extra)
 
     id: Optional[PydanticObjectId] = Field(
         default=None, description="MongoDB document ObjectID"
     )
 
     # State
-    if IS_PYDANTIC_V2:
-        revision_id: Optional[UUID] = Field(
-            default=None, json_schema_extra={"hidden": True}
-        )
-    else:
-        revision_id: Optional[UUID] = Field(default=None, hidden=True)  # type: ignore
-    _previous_revision_id: Optional[UUID] = PrivateAttr(default=None)
+    revision_id: Optional[UUID] = Field(default=None, exclude=True)
     _saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
     _previous_saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
 
@@ -194,15 +183,7 @@ class Document(
     # Database
     _database_major_version: ClassVar[int] = 4
 
-    # Other
-    _hidden_fields: ClassVar[Set[str]] = set()
-
-    def _swap_revision(self):
-        if self.get_settings().use_revision:
-            self._previous_revision_id = self.revision_id
-            self.revision_id = uuid4()
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super(Document, self).__init__(*args, **kwargs)
         self.get_motor_collection()
 
@@ -250,6 +231,8 @@ class Document(
         ignore_cache: bool = False,
         fetch_links: bool = False,
         with_children: bool = False,
+        nesting_depth: Optional[int] = None,
+        nesting_depths_per_field: Optional[Dict[str, int]] = None,
         **pymongo_kwargs,
     ) -> Optional["DocType"]:
         """
@@ -275,11 +258,47 @@ class Document(
             ignore_cache=ignore_cache,
             fetch_links=fetch_links,
             with_children=with_children,
+            nesting_depth=nesting_depth,
+            nesting_depths_per_field=nesting_depths_per_field,
             **pymongo_kwargs,
         )
 
+    def sync(self, merge_strategy: MergeStrategy = MergeStrategy.remote):
+        """
+        Sync the document with the database
+
+        :param merge_strategy: MergeStrategy - how to merge the document
+        :return: None
+        """
+        if (
+            merge_strategy == MergeStrategy.local
+            and self.get_settings().use_state_management is False
+        ):
+            raise ValueError(
+                "State management must be turned on to use local merge strategy"
+            )
+        if self.id is None:
+            raise DocumentWasNotSaved
+        document = self.find_one({"_id": self.id}).run()
+        if document is None:
+            raise DocumentNotFound
+
+        if merge_strategy == MergeStrategy.local:
+            original_changes = self.get_changes()
+            new_state = document.get_saved_state()
+            if new_state is None:
+                raise DocumentWasNotSaved
+            changes_to_apply = self._collect_updates(
+                new_state, original_changes
+            )
+            merge_models(self, document)
+            apply_changes(changes_to_apply, self)
+        elif merge_strategy == MergeStrategy.remote:
+            merge_models(self, document)
+        else:
+            raise ValueError("Invalid merge strategy")
+
     @wrap_with_actions(EventTypes.INSERT)
-    @swap_revision_after
     @save_state_after
     @validate_self_before
     def insert(
@@ -414,7 +433,6 @@ class Document(
         )
 
     @wrap_with_actions(EventTypes.REPLACE)
-    @swap_revision_after
     @save_state_after
     @validate_self_before
     def replace(
@@ -478,7 +496,8 @@ class Document(
         find_query: Dict[str, Any] = {"_id": self.id}
 
         if use_revision_id and not ignore_revision:
-            find_query["revision_id"] = self._previous_revision_id
+            find_query["revision_id"] = self.revision_id
+            self.revision_id = uuid4()
         try:
             self.find_one(find_query).replace_one(
                 self,
@@ -662,10 +681,11 @@ class Document(
             find_query = {"_id": PydanticObjectId()}
 
         if use_revision_id and not ignore_revision:
-            find_query["revision_id"] = self._previous_revision_id
+            find_query["revision_id"] = self.revision_id
 
         if use_revision_id:
-            arguments.append(SetRevisionId(self.revision_id))
+            new_revision_id = uuid4()
+            arguments.append(SetRevisionId(new_revision_id))
         try:
             result = (
                 self.find_one(find_query)
@@ -926,7 +946,7 @@ class Document(
                 self,
                 to_db=True,
                 keep_nulls=self.get_settings().keep_nulls,
-                exclude={"revision_id", "_previous_revision_id"},
+                exclude={"revision_id"},
             )
 
     def get_saved_state(self) -> Optional[Dict[str, Any]]:
@@ -950,7 +970,7 @@ class Document(
             self,
             to_db=True,
             keep_nulls=self.get_settings().keep_nulls,
-            exclude={"revision_id", "_previous_revision_id"},
+            exclude={"revision_id"},
         ):
             return False
         return True
@@ -1008,7 +1028,13 @@ class Document(
     @saved_state_needed
     def get_changes(self) -> Dict[str, Any]:
         return self._collect_updates(
-            self._saved_state, get_dict(self, to_db=True, keep_nulls=self.get_settings().keep_nulls)  # type: ignore
+            self._saved_state,  # type: ignore
+            get_dict(
+                self,
+                to_db=True,
+                keep_nulls=self.get_settings().keep_nulls,
+                exclude={"revision_id"},
+            ),
         )
 
     @saved_state_needed
@@ -1018,7 +1044,8 @@ class Document(
             return {}
 
         return self._collect_updates(
-            self._previous_saved_state, self._saved_state  # type: ignore
+            self._previous_saved_state,
+            self._saved_state,  # type: ignore
         )
 
     @saved_state_needed
@@ -1071,104 +1098,34 @@ class Document(
         return inspection_result
 
     @classmethod
-    def get_hidden_fields(cls):
-        return set(
-            attribute_name
-            for attribute_name, model_field in get_model_fields(cls).items()
-            if get_extra_field_info(model_field, "hidden") is True
+    def check_hidden_fields(cls):
+        hidden_fields = [
+            (name, field)
+            for name, field in get_model_fields(cls).items()
+            if get_extra_field_info(field, "hidden") is True
+        ]
+        if not hidden_fields:
+            return
+        warnings.warn(
+            f"{cls.__name__}: 'hidden=True' is deprecated, please use 'exclude=True'",
+            DeprecationWarning,
         )
-
-    if IS_PYDANTIC_V2:
-
-        def model_dump(
-            self,
-            *,
-            mode="python",
-            include: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
-            exclude: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
-            by_alias: bool = False,
-            exclude_hidden: bool = True,
-            exclude_unset: bool = False,
-            exclude_defaults: bool = False,
-            exclude_none: bool = False,
-            round_trip: bool = False,
-            warnings: bool = True,
-        ) -> "DictStrAny":
-            """
-            Overriding of the respective method from Pydantic
-            Hides fields, marked as "hidden
-            """
-            if exclude_hidden:
-                if isinstance(exclude, AbstractSet):
-                    exclude = {*self._hidden_fields, *exclude}
-                elif isinstance(exclude, Mapping):
-                    exclude = dict(
-                        {k: True for k in self._hidden_fields}, **exclude
-                    )  # type: ignore
-                elif exclude is None:
-                    exclude = self._hidden_fields
-
-            kwargs = {
-                "include": include,
-                "exclude": exclude,
-                "by_alias": by_alias,
-                "exclude_unset": exclude_unset,
-                "exclude_defaults": exclude_defaults,
-                "exclude_none": exclude_none,
-                "round_trip": round_trip,
-                "warnings": warnings,
-            }
-
-            return super().model_dump(**kwargs)
-
-    else:
-
-        def dict(
-            self,
-            *,
-            include: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
-            exclude: Union["AbstractSetIntStr", "MappingIntStrAny"] = None,
-            by_alias: bool = False,
-            skip_defaults: bool = False,
-            exclude_hidden: bool = True,
-            exclude_unset: bool = False,
-            exclude_defaults: bool = False,
-            exclude_none: bool = False,
-        ) -> "DictStrAny":
-            """
-            Overriding of the respective method from Pydantic
-            Hides fields, marked as "hidden
-            """
-            if exclude_hidden:
-                if isinstance(exclude, AbstractSet):
-                    exclude = {*self._hidden_fields, *exclude}
-                elif isinstance(exclude, Mapping):
-                    exclude = dict(
-                        {k: True for k in self._hidden_fields}, **exclude
-                    )  # type: ignore
-                elif exclude is None:
-                    exclude = self._hidden_fields
-
-            kwargs = {
-                "include": include,
-                "exclude": exclude,
-                "by_alias": by_alias,
-                "exclude_unset": exclude_unset,
-                "exclude_defaults": exclude_defaults,
-                "exclude_none": exclude_none,
-            }
-
-            # TODO: Remove this check when skip_defaults are no longer supported
-            if skip_defaults:
-                kwargs["skip_defaults"] = skip_defaults
-
-            return super().dict(**kwargs)
+        if IS_PYDANTIC_V2:
+            for name, field in hidden_fields:
+                field.exclude = True
+                del field.json_schema_extra["hidden"]
+            cls.model_rebuild(force=True)
+        else:
+            for name, field in hidden_fields:
+                field.field_info.exclude = True
+                del field.field_info.extra["hidden"]
+                cls.__exclude_fields__[name] = True
 
     @wrap_with_actions(event_type=EventTypes.VALIDATE_ON_SAVE)
     def validate_self(self, *args, **kwargs):
-        # TODO it can be sync, but needs some actions controller improvements
         if self.get_settings().validate_on_save:
-            parse_model(self.__class__, get_model_dump(self))
+            new_model = parse_model(self.__class__, get_model_dump(self))
+            merge_models(self, new_model)
 
     def to_ref(self):
         if self.id is None:

@@ -7,6 +7,7 @@ import operator
 import pathlib
 import re
 import uuid
+from enum import Enum
 from typing import (
     Any,
     Callable,
@@ -36,6 +37,7 @@ DEFAULT_CUSTOM_ENCODERS: MutableMapping[type, SingleArgCallable] = {
     pathlib.PurePath: str,
     pydantic.SecretBytes: pydantic.SecretBytes.get_secret_value,
     pydantic.SecretStr: pydantic.SecretStr.get_secret_value,
+    datetime.date: lambda d: datetime.datetime.combine(d, datetime.time.min),
     datetime.timedelta: operator.methodcaller("total_seconds"),
     enum.Enum: operator.attrgetter("value"),
     Link: operator.attrgetter("ref"),
@@ -58,6 +60,8 @@ BSON_SCALAR_TYPES = (
     bson.Binary,
     bson.DBRef,
     bson.Decimal128,
+    bson.MaxKey,
+    bson.MinKey,
     bson.ObjectId,
 )
 
@@ -128,21 +132,14 @@ class Encoder:
             items = self._iter_model_items(obj)
             return {key: self.encode(value) for key, value in items}
         if isinstance(obj, Mapping):
-            return {key: self.encode(value) for key, value in obj.items()}
+            return {
+                key if isinstance(key, Enum) else str(key): self.encode(value)
+                for key, value in obj.items()
+            }
         if isinstance(obj, Iterable):
             return [self.encode(value) for value in obj]
 
-        errors = []
-        try:
-            data = dict(obj)
-        except Exception as e:
-            errors.append(e)
-            try:
-                data = vars(obj)
-            except Exception as e:
-                errors.append(e)
-                raise ValueError(errors)
-        return self.encode(data)
+        raise ValueError(f"Cannot encode {obj!r}")
 
     def _iter_model_items(
         self, obj: pydantic.BaseModel

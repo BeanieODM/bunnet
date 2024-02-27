@@ -5,6 +5,9 @@ from bunnet.odm.documents import Document
 
 
 class BaseMigrationController(ABC):
+    def __init__(self, function):
+        self.function = function
+
     @abstractmethod
     def run(self, session):
         pass
