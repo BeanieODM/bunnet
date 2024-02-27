@@ -47,7 +47,7 @@ def test_update():
         found_doc = DocumentWithRevisionTurnedOn.get(doc.id).run()
         found_doc.update(Inc({DocumentWithRevisionTurnedOn.num_1: 1}))
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     with pytest.raises(RevisionIdWasChanged):
         doc.update(Inc({DocumentWithRevisionTurnedOn.num_1: 1}))
 

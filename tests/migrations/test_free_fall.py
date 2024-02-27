@@ -67,14 +67,14 @@ def test_migration_free_fall(settings, notes, db):
     assert note.name == "0"
 
 
-async def test_migration_free_fall_no_use_transactions(settings, notes, db):
+def test_migration_free_fall_no_use_transactions(settings, notes, db):
     migration_settings = MigrationSettings(
         connection_uri=settings.mongodb_dsn,
         database_name=settings.mongodb_db_name,
         path="tests/migrations/migrations_for_test/free_fall",
         use_transaction=False,
     )
-    await run_migrate(migration_settings)
+    run_migrate(migration_settings)
 
     init_bunnet(database=db, document_models=[Note])
     inspection = Note.inspect_collection()
