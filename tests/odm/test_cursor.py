@@ -7,7 +7,7 @@ def test_to_list(documents):
     assert len(result) == 10
 
 
-def test__for(documents):
+def test_async_for(documents):
     documents(10)
     for document in DocumentTestModel.find_all():
         assert document.test_int in list(range(10))

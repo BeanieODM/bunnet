@@ -11,13 +11,16 @@ from bunnet.odm.utils.pydantic import (
     get_model_fields,
     parse_model,
 )
+from bunnet.operators import In, Or
 from tests.odm.models import (
     AddressView,
     ADocument,
     BDocument,
     DocumentToBeLinked,
     DocumentWithBackLink,
+    DocumentWithBackLinkForNesting,
     DocumentWithLink,
+    DocumentWithLinkForNesting,
     DocumentWithListBackLink,
     DocumentWithListLink,
     DocumentWithListOfLinks,
@@ -26,6 +29,7 @@ from tests.odm.models import (
     House,
     LinkDocumentForTextSeacrh,
     Lock,
+    LongSelfLink,
     LoopedLinksA,
     LoopedLinksB,
     Region,
@@ -172,12 +176,18 @@ class TestInsert:
         house.windows.append(window)
 
         house = house.insert(link_rule=WriteRules.WRITE)
-        new_window = Window(x=11, y=22)
-        house.windows.append(new_window)
+        new_window_1 = Window(x=11, y=22)
+        assert new_window_1.id is None
+        house.windows.append(new_window_1)
+        new_window_2 = Window(x=12, y=23)
+        assert new_window_2.id is None
+        house.windows.append(new_window_2)
         house.save(link_rule=WriteRules.WRITE)
         for win in house.windows:
             assert isinstance(win, Window)
             assert win.id
+        assert new_window_1.id is not None
+        assert new_window_2.id is not None
 
     def test_fetch_after_insert(self, house_not_inserted):
         house_not_inserted.fetch_all_links()
@@ -309,7 +319,32 @@ class TestFind:
         assert house_1 is not None
         assert house_2 is not None
 
-    def test_fetch_list_with_some_prefetched(self):
+    def test_find_by_id_list_of_the_linked_docs(self, houses):
+        items = (
+            House.find(House.height < 3, fetch_links=True)
+            .sort(House.height)
+            .to_list()
+        )
+        assert len(items) == 3
+
+        house_lst_1 = House.find(
+            Or(
+                House.door.id == items[0].door.id,
+                In(House.door.id, [items[1].door.id, items[2].door.id]),
+            )
+        ).to_list()
+        house_lst_2 = House.find(
+            Or(
+                House.door.id == items[0].door.id,
+                In(House.door.id, [items[1].door.id, items[2].door.id]),
+            ),
+            fetch_links=True,
+        ).to_list()
+
+        assert len(house_lst_1) == 3
+        assert len(house_lst_2) == 3
+
+    async def test_fetch_list_with_some_prefetched(self):
         docs = []
         for i in range(10):
             doc = DocumentToBeLinked()
@@ -351,6 +386,37 @@ class TestFind:
         ).to_list()
         assert len(docs) == 1
 
+    def test_self_nesting_find_parameters(self):
+        self_linked_doc = LongSelfLink()
+        self_linked_doc.insert(link_rule=WriteRules.WRITE)
+        self_linked_doc.link = self_linked_doc
+        self_linked_doc.save()
+
+        self_linked_doc = LongSelfLink.find_one(
+            nesting_depth=4, fetch_links=True
+        ).run()
+        assert self_linked_doc.link.link.link.link.id == self_linked_doc.id
+        assert isinstance(self_linked_doc.link.link.link.link.link, Link)
+
+        self_linked_doc = LongSelfLink.find_one(
+            nesting_depth=0, fetch_links=True
+        ).run()
+        assert isinstance(self_linked_doc.link, Link)
+
+    def test_nesting_find_parameters(self):
+        back_link_doc = DocumentWithBackLinkForNesting(i=1)
+        back_link_doc.insert()
+        link_doc = DocumentWithLinkForNesting(link=back_link_doc, s="TEST")
+        link_doc.insert()
+
+        doc = DocumentWithBackLinkForNesting.find_one(
+            DocumentWithBackLinkForNesting.i == 1,
+            fetch_links=True,
+            nesting_depths_per_field={"back_link": 2},
+        ).run()
+        assert doc.back_link.link.id == doc.id
+        assert isinstance(doc.back_link.link.back_link, BackLink)
+
 
 class TestReplace:
     def test_do_nothing(self, house):
@@ -375,15 +441,20 @@ class TestSave:
 
     def test_write(self, house):
         house.door.t = 100
-        house.windows = [Window(x=100, y=100, lock=Lock(k=100))]
+        new_window = Window(x=100, y=100, lock=Lock(k=100))
+        house.windows = [new_window]
+        assert new_window.id is None
         house.save(link_rule=WriteRules.WRITE)
         new_house = House.get(house.id, fetch_links=True).run()
         assert new_house.door.t == 100
         for window in new_house.windows:
             assert window.x == 100
             assert window.y == 100
+            assert window.id is not None
             assert isinstance(window.lock, Lock)
             assert window.lock.k == 100
+            assert window.lock.id is not None
+        assert new_window.id is not None
 
 
 class TestDelete:
@@ -475,17 +546,38 @@ class TestOther:
         assert isinstance(res.item.item.item, Link)
 
     def test_looped_links(self):
-        LoopedLinksA(b=LoopedLinksB(a=LoopedLinksA(b=LoopedLinksB()))).insert(
-            link_rule=WriteRules.WRITE
-        )
-        res = LoopedLinksA.find_one(fetch_links=True).run()
+        LoopedLinksA(
+            b=LoopedLinksB(
+                a=LoopedLinksA(
+                    b=LoopedLinksB(
+                        s="4",
+                    ),
+                    s="3",
+                ),
+                s="2",
+            ),
+            s="1",
+        ).insert(link_rule=WriteRules.WRITE)
+        res = LoopedLinksA.find_one(
+            LoopedLinksA.s == "1", fetch_links=True
+        ).run()
         assert isinstance(res, LoopedLinksA)
         assert isinstance(res.b, LoopedLinksB)
         assert isinstance(res.b.a, LoopedLinksA)
-        assert isinstance(res.b.a.b, LoopedLinksB)
-        assert res.b.a.b.a is None
+        assert isinstance(res.b.a.b, Link)
 
-    def test_with_chaining_aggregation(self):
+        LoopedLinksA(
+            b=LoopedLinksB(s="a2"),
+            s="a1",
+        ).insert(link_rule=WriteRules.WRITE)
+        res = LoopedLinksA.find_one(
+            LoopedLinksA.s == "a1", fetch_links=True
+        ).run()
+        assert isinstance(res, LoopedLinksA)
+        assert isinstance(res.b, LoopedLinksB)
+        assert res.b.a is None
+
+    async def test_with_chaining_aggregation(self):
         region = Region()
         region.insert()
 
@@ -507,6 +599,45 @@ class TestOther:
         )
 
         assert addresses_count[0] == {"count": 10}
+
+    def test_with_chaining_aggregation_and_text_search(self):
+        # ARRANGE
+        NUM_DOCS = 10
+        NUM_WITH_LOWER = 5
+        linked_document = LinkDocumentForTextSeacrh(i=1)
+        linked_document.insert()
+
+        for i in range(NUM_DOCS):
+            DocumentWithTextIndexAndLink(
+                s="lower" if i < NUM_WITH_LOWER else "UPPER",
+                link=linked_document,
+            ).insert()
+
+        linked_document_2 = LinkDocumentForTextSeacrh(i=2)
+        linked_document_2.insert()
+
+        for i in range(NUM_DOCS):
+            DocumentWithTextIndexAndLink(
+                s="lower" if i < NUM_WITH_LOWER else "UPPER",
+                link=linked_document_2,
+            ).insert()
+
+        # ACT
+        query = DocumentWithTextIndexAndLink.find(
+            {"$text": {"$search": "lower"}},
+            DocumentWithTextIndexAndLink.link.i == 1,
+            fetch_links=True,
+        )
+
+        # Test both aggregation and count methods
+        document_count_aggregation = query.aggregate(
+            [{"$count": "count"}]
+        ).to_list()
+        document_count = query.count()
+
+        # ASSERT
+        assert document_count_aggregation[0] == {"count": NUM_WITH_LOWER}
+        assert document_count == NUM_WITH_LOWER
 
     def test_with_extra_allow(self, houses):
         res = House.find(fetch_links=True).to_list()
@@ -568,6 +699,30 @@ class TestFindBackLinks:
         ).run()
         assert back_link_doc.back_link[0].id == link_doc.id
         assert back_link_doc.back_link[0].link[0].id == back_link_doc.id
+
+    def test_nesting(self):
+        back_link_doc = DocumentWithBackLinkForNesting(i=1)
+        back_link_doc.insert()
+        link_doc = DocumentWithLinkForNesting(link=back_link_doc, s="TEST")
+        link_doc.insert()
+
+        doc = DocumentWithLinkForNesting.get(
+            link_doc.id, fetch_links=True
+        ).run()
+        assert isinstance(doc.link, Link)
+        doc.link = doc.link.fetch()
+        assert doc.link.i == 1
+
+        back_link_doc = DocumentWithBackLinkForNesting.get(
+            back_link_doc.id, fetch_links=True
+        ).run()
+        assert (
+            back_link_doc.back_link.link.back_link.link.back_link.id
+            == link_doc.id
+        )
+        assert isinstance(
+            back_link_doc.back_link.link.back_link.link.back_link.link, Link
+        )
 
 
 class TestReplaceBackLinks:
@@ -757,3 +912,36 @@ class TestDeleteBackLinks:
                 PersonForReversedOrderInit,
             ],
         )
+
+
+class TestBuildAggregations:
+    def test_find_aggregate_without_fetch_links(self, houses):
+        door = Door.find_one().run()
+        aggregation = House.find(House.door.id == door.id).aggregate(
+            [
+                {"$group": {"_id": "$height", "count": {"$sum": 1}}},
+            ]
+        )
+        assert aggregation.get_aggregation_pipeline() == [
+            {"$match": {"door.$id": door.id}},
+            {"$group": {"_id": "$height", "count": {"$sum": 1}}},
+        ]
+        result = aggregation.to_list()
+        assert result == [{"_id": 0, "count": 1}]
+
+    def test_find_aggregate_with_fetch_links(self, houses):
+        door = Door.find_one().run()
+        aggregation = House.find(
+            House.door.id == door.id, fetch_links=True
+        ).aggregate(
+            [
+                {"$group": {"_id": "$height", "count": {"$sum": 1}}},
+            ]
+        )
+        assert len(aggregation.get_aggregation_pipeline()) == 12
+        assert aggregation.get_aggregation_pipeline()[10:] == [
+            {"$match": {"door._id": door.id}},
+            {"$group": {"_id": "$height", "count": {"$sum": 1}}},
+        ]
+        result = aggregation.to_list()
+        assert result == [{"_id": 0, "count": 1}]

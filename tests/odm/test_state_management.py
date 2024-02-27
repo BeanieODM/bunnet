@@ -4,7 +4,7 @@ from bson import ObjectId
 from bunnet import PydanticObjectId, WriteRules
 from bunnet.exceptions import StateManagementIsTurnedOff, StateNotSaved
 from bunnet.odm.utils.parsing import parse_obj
-from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
+from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2, parse_model
 from tests.odm.models import (
     DocumentWithTurnedOffStateManagement,
     DocumentWithTurnedOnReplaceObjects,
@@ -407,8 +407,8 @@ class TestStateManagement:
                 assert doc.get_previous_saved_state() is None
 
         def test_insert(self, state_without_id):
-            doc = DocumentWithTurnedOnStateManagement.parse_obj(
-                state_without_id
+            doc = parse_model(
+                DocumentWithTurnedOnStateManagement, state_without_id
             )
             assert doc.get_saved_state() is None
             doc.insert()
@@ -430,3 +430,33 @@ class TestStateManagement:
 
             assert saved_doc_previous.get_saved_state()["num_1"] == 100
             assert saved_doc_previous.get_previous_saved_state()["num_1"] == 1
+
+        def test_exclude_revision_id(self, saved_doc_previous):
+            saved_doc_previous.num_1 = 100
+            saved_doc_previous.replace()
+
+            assert saved_doc_previous.get_saved_state()["num_1"] == 100
+            assert saved_doc_previous.get_previous_saved_state()["num_1"] == 1
+
+            assert (
+                saved_doc_previous.get_saved_state().get("revision_id") is None
+            )
+            assert (
+                saved_doc_previous.get_saved_state().get(
+                    "previous_revision_id"
+                )
+                is None
+            )
+
+            assert (
+                saved_doc_previous.get_previous_saved_state().get(
+                    "revision_id"
+                )
+                is None
+            )
+            assert (
+                saved_doc_previous.get_previous_saved_state().get(
+                    "previous_revision_id"
+                )
+                is None
+            )

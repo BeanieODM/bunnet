@@ -88,8 +88,15 @@ def test_delete_many_with_session(preset_documents, session):
     q = (
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
-        .set_session(session=session)
+        .delete(session=session)
+    )  # noqa
+    assert q.session == session
+
+    q = (
+        Sample.find_many(Sample.integer > 1)
+        .find_many(Sample.nested.optional == None)
         .delete()
+        .set_session(session=session)
         .run()
     )  # noqa
 

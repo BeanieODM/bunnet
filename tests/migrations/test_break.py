@@ -52,7 +52,7 @@ def test_migration_break(settings, notes, db):
     with pytest.raises(Exception):
         run_migrate(migration_settings)
 
-    init_bunnet(database=db, document_models=[Note])
+    init_bunnet(database=db, document_models=[OldNote])
     inspection = OldNote.inspect_collection()
     assert inspection.status == InspectionStatuses.OK
     notes = OldNote.get_motor_collection().find().to_list(length=100)

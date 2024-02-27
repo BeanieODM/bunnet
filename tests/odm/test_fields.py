@@ -2,6 +2,7 @@ import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import AbstractSet, Mapping
+from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -14,8 +15,10 @@ from bunnet.odm.utils.encoder import Encoder
 from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 from tests.odm.models import (
     DocumentTestModel,
+    DocumentTestModelIndexFlagsAnnotated,
     DocumentWithBsonEncodersFiledsTypes,
     DocumentWithCustomFiledsTypes,
+    DocumentWithDeprecatedHiddenField,
     Sample,
 )
 
@@ -106,12 +109,22 @@ def test_custom_filed_types():
     )
 
 
-def test_hidden(document):
+def test_excluded(document):
     document = DocumentTestModel.find_one().run()
     if IS_PYDANTIC_V2:
         assert "test_list" not in document.model_dump()
     else:
         assert "test_list" not in document.dict()
+
+
+def test_hidden():
+    document = DocumentWithDeprecatedHiddenField(test_hidden=["abc", "def"])
+    document.insert()
+    document = DocumentWithDeprecatedHiddenField.find_one().run()
+    if IS_PYDANTIC_V2:
+        assert "test_hidden" not in document.model_dump()
+    else:
+        assert "test_hidden" not in document.dict()
 
 
 def test_revision_id_not_in_schema():
@@ -156,3 +169,17 @@ def test_param_exclude(document, exclude):
 def test_expression_fields():
     assert Sample.nested.integer == "nested.integer"
     assert Sample.nested["integer"] == "nested.integer"
+
+
+def test_indexed_field() -> None:
+    """Test that fields can be declared and instantiated with Indexed()
+    and Annotated[..., Indexed()]."""
+
+    # No error should be raised the document is properly initialized
+    # and `Indexed` is implemented correctly.
+    DocumentTestModelIndexFlagsAnnotated(
+        str_index="test",
+        str_index_annotated="test",
+        uuid_index=uuid4(),
+        uuid_index_annotated=uuid4(),
+    )
