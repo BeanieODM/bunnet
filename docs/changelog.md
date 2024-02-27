@@ -2,6 +2,14 @@
 
 Bunnet project
 
+## [1.3.0] - 2023-10-14
+        
+### Sync With Beanie | 2024.02
+- Author - [Roman Right](https://github.com/roman-right)
+- PR <https://github.com/roman-right/bunnet/pull/20>
+            
+[1.3.0]: https://pypi.org/project/bunnet/1.3.0
+
 ## [1.2.0] - 2023-10-14
         
 ### Sync With Beanie | 2023.10

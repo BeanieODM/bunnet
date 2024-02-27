@@ -33,7 +33,7 @@ from bunnet.odm.union_doc import UnionDoc
 from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.views import View
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     # ODM
     "Document",
