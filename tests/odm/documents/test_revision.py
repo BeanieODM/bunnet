@@ -4,7 +4,11 @@ from pymongo.errors import BulkWriteError
 from bunnet import BulkWriter
 from bunnet.exceptions import RevisionIdWasChanged
 from bunnet.odm.operators.update.general import Inc
-from tests.odm.models import DocumentWithRevisionTurnedOn
+from tests.odm.models import (
+    DocumentWithRevisionTurnedOn,
+    LockWithRevision,
+    WindowWithRevision,
+)
 
 
 def test_replace():
@@ -22,7 +26,7 @@ def test_replace():
         found_doc.num_1 += 1
         found_doc.replace()
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     doc.num_1 = 4
     with pytest.raises(RevisionIdWasChanged):
         doc.replace()
@@ -43,7 +47,7 @@ def test_update():
         found_doc = DocumentWithRevisionTurnedOn.get(doc.id).run()
         found_doc.update(Inc({DocumentWithRevisionTurnedOn.num_1: 1}))
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     with pytest.raises(RevisionIdWasChanged):
         doc.update(Inc({DocumentWithRevisionTurnedOn.num_1: 1}))
 
@@ -68,7 +72,7 @@ def test_save_changes():
         found_doc.num_1 += 1
         found_doc.save_changes()
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     doc.num_1 = 4
     with pytest.raises(RevisionIdWasChanged):
         doc.save_changes()
@@ -91,7 +95,7 @@ def test_save():
         found_doc.num_1 += 1
         found_doc.save()
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     doc.num_1 = 4
     with pytest.raises(RevisionIdWasChanged):
         doc.save()
@@ -122,7 +126,7 @@ def test_update_bulk_writer():
         with BulkWriter() as bulk_writer:
             found_doc.save(bulk_writer=bulk_writer)
 
-    doc._previous_revision_id = "wrong"
+    doc.revision_id = "wrong"
     doc.num_1 = 4
     with pytest.raises(BulkWriteError):
         with BulkWriter() as bulk_writer:
@@ -144,11 +148,21 @@ def test_save_changes_when_there_were_no_changes():
     doc = DocumentWithRevisionTurnedOn(num_1=1, num_2=2)
     doc.insert()
     revision = doc.revision_id
-    old_revision = doc._previous_revision_id
 
     doc.save_changes()
     assert doc.revision_id == revision
-    assert doc._previous_revision_id == old_revision
 
-    doc = DocumentWithRevisionTurnedOn.get(doc.id).run()
-    assert doc._previous_revision_id == old_revision
+    DocumentWithRevisionTurnedOn.get(doc.id).run()
+    assert doc.revision_id == revision
+
+
+def test_revision_id_for_link():
+    lock = LockWithRevision(k=1)
+    lock.insert()
+
+    lock_rev_id = lock.revision_id
+
+    window = WindowWithRevision(x=0, y=0, lock=lock)
+
+    window.insert()
+    assert lock.revision_id == lock_rev_id

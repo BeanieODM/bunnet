@@ -1,5 +1,6 @@
 import sys
 from collections import OrderedDict
+from dataclasses import dataclass
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -19,6 +20,7 @@ else:
     from typing_extensions import get_args
 
 from typing import OrderedDict as OrderedDictType
+from typing import Tuple
 
 from bson import DBRef, ObjectId
 from bson.errors import InvalidId
@@ -65,13 +67,32 @@ if TYPE_CHECKING:
     from bunnet.odm.documents import DocType
 
 
-def Indexed(typ, index_type=ASCENDING, **kwargs):
+@dataclass(frozen=True)
+class IndexedAnnotation:
+    _indexed: Tuple[int, Dict[str, Any]]
+
+
+def Indexed(typ=None, index_type=ASCENDING, **kwargs):
     """
-    Returns a subclass of `typ` with an extra attribute `_indexed` as a tuple:
+    If `typ` is defined, returns a subclass of `typ` with an extra attribute
+    `_indexed` as a tuple:
     - Index 0: `index_type` such as `pymongo.ASCENDING`
     - Index 1: `kwargs` passed to `IndexModel`
     When instantiated the type of the result will actually be `typ`.
+
+    When `typ` is not defined, returns an `IndexedAnnotation` instance, to be
+    used as metadata in `Annotated` fields.
+
+    Example:
+    ```py
+    # Both fields would have the same behavior
+    class MyModel(BaseModel):
+        field1: Indexed(str, unique=True)
+        field2: Annotated[str, Indexed(unique=True)]
+    ```
     """
+    if typ is None:
+        return IndexedAnnotation(_indexed=(index_type, kwargs))
 
     class NewType(typ):
         _indexed = (index_type, kwargs)
@@ -85,6 +106,12 @@ def Indexed(typ, index_type=ASCENDING, **kwargs):
             def __get_pydantic_core_schema__(
                 cls, _source_type: Any, _handler: GetCoreSchemaHandler
             ) -> core_schema.CoreSchema:
+                custom_type = getattr(
+                    typ, "__get_pydantic_core_schema__", None
+                )
+                if custom_type is not None:
+                    return custom_type(_source_type, _handler)
+
                 return core_schema.no_info_after_validator_function(
                     lambda v: v,
                     simple_ser_schema(typ.__name__),
@@ -111,7 +138,7 @@ class PydanticObjectId(ObjectId):
                 v = v.decode("utf-8")
             try:
                 return PydanticObjectId(v)
-            except InvalidId:
+            except (InvalidId, TypeError):
                 raise ValueError("Id must be of type PydanticObjectId")
 
         @classmethod
@@ -162,6 +189,8 @@ if not IS_PYDANTIC_V2:
     ENCODERS_BY_TYPE[
         PydanticObjectId
     ] = str  # it is a workaround to force pydantic make json schema for this field
+
+BunnetObjectId = PydanticObjectId
 
 
 class ExpressionField(str):
@@ -247,6 +276,7 @@ class LinkInfo(BaseModel):
     document_class: Type[BaseModel]  # Document class
     link_type: LinkTypes
     nested_links: Optional[Dict] = None
+    is_fetchable: bool = True
 
 
 T = TypeVar("T")

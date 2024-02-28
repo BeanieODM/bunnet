@@ -16,7 +16,7 @@ from pymongo import ReturnDocument
 from pymongo import UpdateMany as UpdateManyPyMongo
 from pymongo import UpdateOne as UpdateOnePyMongo
 from pymongo.client_session import ClientSession
-from pymongo.results import UpdateResult
+from pymongo.results import InsertOneResult, UpdateResult
 
 from bunnet.odm.bulk import BulkWriter, Operation
 from bunnet.odm.interfaces.clone import CloneInterface
@@ -335,7 +335,7 @@ class UpdateOne(UpdateQuery):
 
     def run(
         self,
-    ):
+    ) -> Union[UpdateResult, InsertOneResult, Optional["DocType"]]:
         """
         Run the query
         :return:

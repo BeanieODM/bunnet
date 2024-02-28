@@ -63,6 +63,8 @@ def test_replace(document):
         new_doc = document.model_copy(update=update_data)
     else:
         new_doc = document.copy(update=update_data)
+        # pydantic v1 doesn't copy excluded fields
+        new_doc.test_list = document.test_list
     # document.test_str = "REPLACED_VALUE"
     new_doc.replace()
     new_document = DocumentTestModel.get(document.id).run()

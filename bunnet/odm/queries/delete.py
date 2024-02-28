@@ -10,6 +10,7 @@ from typing import (
 
 from pymongo import DeleteMany as DeleteManyPyMongo
 from pymongo import DeleteOne as DeleteOnePyMongo
+from pymongo.client_session import ClientSession
 from pymongo.results import DeleteResult
 
 from bunnet.odm.bulk import BulkWriter, Operation
@@ -35,7 +36,7 @@ class DeleteQuery(SessionMethods, RunInterface, CloneInterface):
     ):
         self.document_model = document_model
         self.find_query = find_query
-        self.session = None
+        self.session: Optional[ClientSession] = None
         self.bulk_writer = bulk_writer
         self.pymongo_kwargs: Dict[str, Any] = pymongo_kwargs
 

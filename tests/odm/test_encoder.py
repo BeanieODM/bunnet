@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime
+from uuid import uuid4
 
 import pytest
 from bson import Binary, Regex
@@ -11,6 +12,7 @@ from tests.odm.models import (
     Child,
     DocumentForEncodingTest,
     DocumentForEncodingTestDate,
+    DocumentWithComplexDictKey,
     DocumentWithDecimalField,
     DocumentWithHttpUrlField,
     DocumentWithKeepNullsFalse,
@@ -152,3 +154,18 @@ def test_should_be_able_to_save_retrieve_doc_with_url():
 
     assert isinstance(new_doc.url_field, AnyUrl)
     assert new_doc.url_field == doc.url_field
+
+
+def test_dict_with_complex_key():
+    assert isinstance(Encoder().encode({uuid4(): datetime.now()}), dict)
+
+    uuid = uuid4()
+    # reset microseconds, because it looses by mongo
+    dt = datetime.now().replace(microsecond=0)
+
+    doc = DocumentWithComplexDictKey(dict_field={uuid: dt})
+    doc.insert()
+    new_doc = DocumentWithComplexDictKey.get(doc.id).run()
+
+    assert isinstance(new_doc.dict_field, dict)
+    assert new_doc.dict_field.get(uuid) == dt

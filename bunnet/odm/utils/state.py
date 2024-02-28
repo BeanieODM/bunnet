@@ -53,13 +53,3 @@ def save_state_after(f: Callable):
         return result
 
     return wrapper
-
-
-def swap_revision_after(f: Callable):
-    @wraps(f)
-    def wrapper(self: "DocType", *args, **kwargs):
-        result = f(self, *args, **kwargs)
-        self._swap_revision()
-        return result
-
-    return wrapper

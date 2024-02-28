@@ -56,6 +56,29 @@ def test_migration_free_fall(settings, notes, db):
     init_bunnet(database=db, document_models=[Note])
     inspection = Note.inspect_collection()
     assert inspection.status == InspectionStatuses.OK
+    note = Note.find_one({}).run()
+    assert note.title == "0"
+
+    migration_settings.direction = RunningDirections.BACKWARD
+    run_migrate(migration_settings)
+    inspection = OldNote.inspect_collection()
+    assert inspection.status == InspectionStatuses.OK
+    note = OldNote.find_one({}).run()
+    assert note.name == "0"
+
+
+def test_migration_free_fall_no_use_transactions(settings, notes, db):
+    migration_settings = MigrationSettings(
+        connection_uri=settings.mongodb_dsn,
+        database_name=settings.mongodb_db_name,
+        path="tests/migrations/migrations_for_test/free_fall",
+        use_transaction=False,
+    )
+    run_migrate(migration_settings)
+
+    init_bunnet(database=db, document_models=[Note])
+    inspection = Note.inspect_collection()
+    assert inspection.status == InspectionStatuses.OK
     note = ~Note.find_one({})
     assert note.title == "0"
 

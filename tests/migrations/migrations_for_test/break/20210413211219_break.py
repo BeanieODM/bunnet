@@ -32,8 +32,8 @@ class Forward:
     @iterative_migration(batch_size=2)
     def name_to_title(self, input_document: OldNote, output_document: Note):
         output_document.title = input_document.name
-        if output_document.title == "5":
-            raise Exception
+        if output_document.title > "5":
+            output_document.name = "5"
 
 
 class Backward:

@@ -53,7 +53,6 @@ class TestInheritance:
         assert isinstance(updated_bike, Bike)
         assert updated_bike.color == "yellow"
 
-        assert Car._parent is Vehicle
         assert Bus._parent is Car
 
         assert len(big_bicycles) == 1

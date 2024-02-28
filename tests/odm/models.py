@@ -24,8 +24,10 @@ from uuid import UUID, uuid4
 
 import pymongo
 from pydantic import (
+    UUID4,
     BaseModel,
     ConfigDict,
+    EmailStr,
     Field,
     HttpUrl,
     PrivateAttr,
@@ -35,6 +37,7 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 from pydantic_core import core_schema
 from pymongo import IndexModel
+from typing_extensions import Annotated
 
 from bunnet import (
     DecimalAnnotation,
@@ -146,13 +149,7 @@ class DocumentTestModel(Document):
     test_int: int
     test_doc: SubDocument
     test_str: str
-
-    if IS_PYDANTIC_V2:
-        test_list: List[SubDocument] = Field(
-            json_schema_extra={"hidden": True}
-        )
-    else:
-        test_list: List[SubDocument] = Field(hidden=True)
+    test_list: List[SubDocument] = Field(exclude=True)
 
     class Settings:
         use_cache = True
@@ -199,6 +196,17 @@ class DocumentTestModelWithIndexFlagsAliases(Document):
     )
 
 
+class DocumentTestModelIndexFlagsAnnotated(Document):
+    str_index: Indexed(str, index_type=pymongo.TEXT)
+    str_index_annotated: Indexed(str, index_type=pymongo.ASCENDING)
+    uuid_index_annotated: Annotated[UUID4, Indexed(unique=True)]
+
+    if not IS_PYDANTIC_V2:
+        # The UUID4 type raises a ValueError with the current
+        # implementation of Indexed when using Pydantic v2.
+        uuid_index: Indexed(UUID4, unique=True)
+
+
 class DocumentTestModelWithComplexIndex(Document):
     test_int: int
     test_list: List[SubDocument]
@@ -242,6 +250,13 @@ class DocumentTestModelFailInspection(Document):
         name = "DocumentTestModel"
 
 
+class DocumentWithDeprecatedHiddenField(Document):
+    if IS_PYDANTIC_V2:
+        test_hidden: List[str] = Field(json_schema_extra={"hidden": True})
+    else:
+        test_hidden: List[str] = Field(hidden=True)
+
+
 class DocumentWithCustomIdUUID(Document):
     id: UUID = Field(default_factory=uuid4)
     name: str
@@ -267,6 +282,9 @@ class DocumentWithCustomFiledsTypes(Document):
     set_type: Set[str]
     tuple_type: Tuple[int, str]
     path: Path
+
+    class Settings:
+        bson_encoders = {Color: vars}
 
     if IS_PYDANTIC_V2:
         model_config = ConfigDict(
@@ -449,6 +467,7 @@ class DocumentWithTurnedOffStateManagement(Document):
 class DocumentWithValidationOnSave(Document):
     num_1: int
     num_2: int
+    related: PydanticObjectId = Field(default_factory=PydanticObjectId)
 
     @after_event(ValidateOnSave)
     def num_2_plus_1(self):
@@ -534,10 +553,7 @@ class House(Document):
     roof: Optional[Link[Roof]] = None
     yards: Optional[List[Link[Yard]]] = None
     height: Indexed(int) = 2
-    if IS_PYDANTIC_V2:
-        name: Indexed(str) = Field(json_schema_extra={"hidden": True})
-    else:
-        name: Indexed(str) = Field(hidden=True)
+    name: Indexed(str) = Field(exclude=True)
 
     if IS_PYDANTIC_V2:
         model_config = ConfigDict(
@@ -567,19 +583,6 @@ class DocumentWithStringField(Document):
 
 class DocumentForEncodingTestDate(Document):
     date_field: datetime.date = Field(default_factory=datetime.date.today)
-
-    class Settings:
-        name = "test_date"
-        bson_encoders = {
-            datetime.date: lambda dt: datetime.datetime(
-                year=dt.year,
-                month=dt.month,
-                day=dt.day,
-                hour=0,
-                minute=0,
-                second=0,
-            )
-        }
 
 
 class DocumentUnion(UnionDoc):
@@ -809,13 +812,21 @@ class SelfLinked(Document):
     item: Optional[Link["SelfLinked"]] = None
     s: str
 
+    class Settings:
+        max_nesting_depth = 2
+
 
 class LoopedLinksA(Document):
-    b: "LoopedLinksB"
+    b: Link["LoopedLinksB"]
+    s: str
+
+    class Settings:
+        max_nesting_depths_per_field = {"b": 2}
 
 
 class LoopedLinksB(Document):
-    a: Optional[LoopedLinksA] = None
+    a: Optional[Link[LoopedLinksA]] = None
+    s: str
 
 
 class DocWithCollectionInnerClass(Document):
@@ -1037,3 +1048,56 @@ class DocWithCallWrapper(Document):
 
 class DocumentWithHttpUrlField(Document):
     url_field: HttpUrl
+
+
+class DocumentWithComplexDictKey(Document):
+    dict_field: Dict[UUID, datetime.datetime]
+
+
+class DocumentWithIndexedObjectId(Document):
+    pyid: Indexed(PydanticObjectId)
+    uuid: Annotated[UUID4, Indexed(unique=True)]
+    email: Annotated[EmailStr, Indexed(unique=True)]
+
+
+class DocumentToTestSync(Document):
+    s: str = "TEST"
+    i: int = 1
+    n: Nested = Nested(
+        integer=1, option_1=Option1(s="test"), union=Option1(s="test")
+    )
+    o: Optional[Option2] = None
+    d: Dict[str, Any] = {}
+
+    class Settings:
+        use_state_management = True
+
+
+class DocumentWithLinkForNesting(Document):
+    link: Link["DocumentWithBackLinkForNesting"]
+    s: str
+
+    class Settings:
+        max_nesting_depths_per_field = {"link": 0}
+
+
+class DocumentWithBackLinkForNesting(Document):
+    if IS_PYDANTIC_V2:
+        back_link: BackLink[DocumentWithLinkForNesting] = Field(
+            json_schema_extra={"original_field": "link"},
+        )
+    else:
+        back_link: BackLink[DocumentWithLinkForNesting] = Field(
+            original_field="link"
+        )
+    i: int
+
+    class Settings:
+        max_nesting_depths_per_field = {"back_link": 5}
+
+
+class LongSelfLink(Document):
+    link: Optional[Link["LongSelfLink"]] = None
+
+    class Settings:
+        max_nesting_depth = 50

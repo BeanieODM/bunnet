@@ -16,9 +16,11 @@ from bunnet.odm.actions import (
 from bunnet.odm.bulk import BulkWriter
 from bunnet.odm.custom_types import DecimalAnnotation
 from bunnet.odm.custom_types.bson.binary import BsonBinary
-from bunnet.odm.documents import Document
+from bunnet.odm.documents import Document, MergeStrategy
+from bunnet.odm.enums import SortDirection
 from bunnet.odm.fields import (
     BackLink,
+    BunnetObjectId,
     DeleteRules,
     Indexed,
     Link,
@@ -31,7 +33,7 @@ from bunnet.odm.union_doc import UnionDoc
 from bunnet.odm.utils.init import init_bunnet
 from bunnet.odm.views import View
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     # ODM
     "Document",
@@ -39,9 +41,12 @@ __all__ = [
     "UnionDoc",
     "init_bunnet",
     "PydanticObjectId",
+    "BunnetObjectId",
     "Indexed",
     "TimeSeriesConfig",
     "Granularity",
+    "SortDirection",
+    "MergeStrategy",
     # Actions
     "before_event",
     "after_event",
