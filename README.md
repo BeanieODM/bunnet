@@ -78,7 +78,7 @@ product.set({Product.name:"Gold bar"})
 
 ### Documentation
 
-- **[Doc](https://roman-right.github.io/bunnet/)** - Tutorial, API documentation, and development guidelines.
+- **[Doc](https://beanieodm.github.io/bunnet/)** - Tutorial, API documentation, and development guidelines.
 
 ### Resources
 
