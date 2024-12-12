@@ -59,10 +59,10 @@ queue = ["beanie-batteries-queue>=0.2"]
 
 [project.urls]
 homepage = "https://beanie-odm.dev"
-repository = "https://github.com/roman-right/beanie"
+repository = "https://github.com/roman-right/bunnet"
 
 [project.scripts]
-beanie = "beanie.executors.migrate:migrations"
+bunnet = "bunnet.executors.migrate:migrations"
 
 # TOOLS
 
