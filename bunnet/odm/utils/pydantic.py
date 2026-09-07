@@ -1,4 +1,4 @@
-from typing import Any, Type
+from typing import Any
 
 import pydantic
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ else:
     from pydantic import parse_obj_as
 
 
-def parse_object_as(object_type: Type, data: Any):
+def parse_object_as(object_type: type, data: Any):
     if IS_PYDANTIC_V2:
         return TypeAdapter(object_type).validate_python(data)
     else:
@@ -32,7 +32,7 @@ def get_model_fields(model):
         return model.__fields__
 
 
-def parse_model(model_type: Type[BaseModel], data: Any):
+def parse_model(model_type: type[BaseModel], data: Any):
     if IS_PYDANTIC_V2:
         return model_type.model_validate(data)
     else:

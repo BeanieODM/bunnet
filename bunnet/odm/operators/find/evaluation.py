@@ -1,11 +1,9 @@
 from abc import ABC
-from typing import Optional
 
 from bunnet.odm.operators.find import BaseFindOperator
 
 
-class BaseFindEvaluationOperator(BaseFindOperator, ABC):
-    ...
+class BaseFindEvaluationOperator(BaseFindOperator, ABC): ...
 
 
 class Expr(BaseFindEvaluationOperator):
@@ -101,7 +99,7 @@ class RegEx(BaseFindEvaluationOperator):
         self,
         field,
         pattern: str,
-        options: Optional[str] = None,
+        options: str | None = None,
     ):
         self.field = field
         self.pattern = pattern
@@ -147,7 +145,7 @@ class Text(BaseFindEvaluationOperator):
     def __init__(
         self,
         search: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         case_sensitive: bool = False,
         diacritic_sensitive: bool = False,
     ):

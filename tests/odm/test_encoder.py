@@ -44,7 +44,7 @@ def test_encode_date():
 def test_encode_regex():
     raw_regex = r"^AA.*CC$"
     case_sensitive_regex = re.compile(raw_regex)
-    case_insensitive_regex = re.compile(raw_regex, re.I)
+    case_insensitive_regex = re.compile(raw_regex, re.IGNORECASE)
 
     assert isinstance(Encoder().encode(case_sensitive_regex), Regex)
     assert isinstance(Encoder().encode(case_insensitive_regex), Regex)

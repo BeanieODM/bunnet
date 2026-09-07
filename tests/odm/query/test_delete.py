@@ -9,13 +9,13 @@ def test_delete_many(preset_documents):
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
         .count()
-    )  # noqa
+    )
     delete_result = (
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
         .delete()
         .run()
-    )  # noqa
+    )
     count_deleted = delete_result.deleted_count
     count_after = Sample.count()
     assert count_before - count_find == count_after
@@ -25,7 +25,7 @@ def test_delete_many(preset_documents):
     #     .find_many(Sample.nested.optional == None)
     #     .delete_many(),
     #     DeleteMany,
-    # )# noqa
+    # )
 
 
 def test_delete_all(preset_documents):
@@ -43,7 +43,7 @@ def test_delete_self(preset_documents):
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
         .to_list()
-    )  # noqa
+    )
     a = result[0]
     delete_result = a.delete()
     count_deleted = delete_result.deleted_count
@@ -59,7 +59,7 @@ def test_delete_one(preset_documents):
         .find_one(Sample.nested.optional == None)
         .delete()
         .run()
-    )  # noqa
+    )
     count_after = Sample.count()
     count_deleted = delete_result.deleted_count
     assert count_before == count_after + 1
@@ -71,7 +71,7 @@ def test_delete_one(preset_documents):
         .find_one(Sample.nested.optional == None)
         .delete_one()
         .run()
-    )  # noqa
+    )
     count_deleted = delete_result.deleted_count
     count_after = Sample.count()
     assert count_before == count_after + 1
@@ -84,12 +84,12 @@ def test_delete_many_with_session(preset_documents, session):
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
         .count()
-    )  # noqa
+    )
     q = (
         Sample.find_many(Sample.integer > 1)
         .find_many(Sample.nested.optional == None)
         .delete(session=session)
-    )  # noqa
+    )
     assert q.session == session
 
     q = (
@@ -98,7 +98,7 @@ def test_delete_many_with_session(preset_documents, session):
         .delete()
         .set_session(session=session)
         .run()
-    )  # noqa
+    )
 
     # assert q.session == session
 

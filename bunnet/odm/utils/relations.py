@@ -1,6 +1,6 @@
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict
-from typing import Mapping as MappingType
+from collections.abc import Mapping as MappingType
+from typing import TYPE_CHECKING, Any
 
 from bunnet.odm.fields import (
     ExpressionField,
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 def convert_ids(
     query: MappingType[str, Any], doc: "Document", fetch_links: bool
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # TODO add all the cases
     new_query = {}
     for k, v in query.items():
@@ -38,9 +38,11 @@ def convert_ids(
             new_v = convert_ids(v, doc, fetch_links)
         elif isinstance(v, list):
             new_v = [
-                convert_ids(ele, doc, fetch_links)
-                if isinstance(ele, Mapping)
-                else ele
+                (
+                    convert_ids(ele, doc, fetch_links)
+                    if isinstance(ele, Mapping)
+                    else ele
+                )
                 for ele in v
             ]
         else:

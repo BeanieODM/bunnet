@@ -1,11 +1,10 @@
 from inspect import signature
-from typing import List, Type
 
 from bunnet.migrations.controllers.base import BaseMigrationController
 from bunnet.odm.documents import Document
 
 
-def free_fall_migration(document_models: List[Type[Document]]):
+def free_fall_migration(document_models: list[type[Document]]):
     class FreeFallMigrationController(BaseMigrationController):
         def __init__(self, function):
             self.function = function
@@ -16,7 +15,7 @@ def free_fall_migration(document_models: List[Type[Document]]):
             pass
 
         @property
-        def models(self) -> List[Type[Document]]:
+        def models(self) -> list[type[Document]]:
             return self.document_models
 
         def run(self, session):

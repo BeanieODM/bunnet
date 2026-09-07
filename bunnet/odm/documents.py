@@ -1,16 +1,11 @@
 import warnings
+from collections.abc import Iterable, Mapping
 from enum import Enum
 from typing import (
     Any,
     ClassVar,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
     Optional,
-    Type,
     TypeVar,
-    Union,
 )
 from uuid import UUID, uuid4
 
@@ -31,6 +26,7 @@ from pymongo.results import (
     DeleteResult,
     InsertManyResult,
 )
+from typing_extensions import Self
 
 from bunnet.exceptions import (
     CollectionWasNotInitialized,
@@ -106,7 +102,7 @@ DocType = TypeVar("DocType", bound="Document")
 DocumentProjectionType = TypeVar("DocumentProjectionType", bound=BaseModel)
 
 
-def json_schema_extra(schema: Dict[str, Any], model: Type["Document"]) -> None:
+def json_schema_extra(schema: dict[str, Any], model: type["Document"]) -> None:
     # remove excluded fields from the json schema
     properties = schema.get("properties")
     if not properties:
@@ -162,29 +158,29 @@ class Document(
             fields = {"id": "_id"}
             schema_extra = staticmethod(json_schema_extra)
 
-    id: Optional[PydanticObjectId] = Field(
+    id: PydanticObjectId | None = Field(
         default=None, description="MongoDB document ObjectID"
     )
 
     # State
-    revision_id: Optional[UUID] = Field(default=None, exclude=True)
-    _saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
-    _previous_saved_state: Optional[Dict[str, Any]] = PrivateAttr(default=None)
+    revision_id: UUID | None = Field(default=None, exclude=True)
+    _saved_state: dict[str, Any] | None = PrivateAttr(default=None)
+    _previous_saved_state: dict[str, Any] | None = PrivateAttr(default=None)
 
     # Relations
-    _link_fields: ClassVar[Optional[Dict[str, LinkInfo]]] = None
+    _link_fields: ClassVar[dict[str, LinkInfo] | None] = None
 
     # Cache
-    _cache: ClassVar[Optional[LRUCache]] = None
+    _cache: ClassVar[LRUCache | None] = None
 
     # Settings
-    _document_settings: ClassVar[Optional[DocumentSettings]] = None
+    _document_settings: ClassVar[DocumentSettings | None] = None
 
     # Database
     _database_major_version: ClassVar[int] = 4
 
     def __init__(self, *args, **kwargs) -> None:
-        super(Document, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.get_motor_collection()
 
     @classmethod
@@ -225,14 +221,14 @@ class Document(
 
     @classmethod
     def get(
-        cls: Type["DocType"],
+        cls: type["DocType"],
         document_id: Any,
-        session: Optional[ClientSession] = None,
+        session: ClientSession | None = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
         with_children: bool = False,
-        nesting_depth: Optional[int] = None,
-        nesting_depths_per_field: Optional[Dict[str, int]] = None,
+        nesting_depth: int | None = None,
+        nesting_depths_per_field: dict[str, int] | None = None,
         **pymongo_kwargs,
     ) -> Optional["DocType"]:
         """
@@ -302,12 +298,12 @@ class Document(
     @save_state_after
     @validate_self_before
     def insert(
-        self: DocType,
+        self,
         *,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
-        session: Optional[ClientSession] = None,
-        skip_actions: Optional[List[Union[ActionDirections, str]]] = None,
-    ) -> DocType:
+        session: ClientSession | None = None,
+        skip_actions: list[ActionDirections | str] | None = None,
+    ) -> Self:
         """
         Insert the document (self) to the collection
         :return: Document
@@ -329,7 +325,7 @@ class Document(
                         LinkTypes.LIST,
                         LinkTypes.OPTIONAL_LIST,
                     ]:
-                        if isinstance(value, List):
+                        if isinstance(value, list):
                             for obj in value:
                                 if isinstance(obj, Document):
                                     obj.save(link_rule=WriteRules.WRITE)
@@ -351,9 +347,9 @@ class Document(
         return self
 
     def create(
-        self: DocType,
-        session: Optional[ClientSession] = None,
-    ) -> DocType:
+        self,
+        session: ClientSession | None = None,
+    ) -> Self:
         """
         The same as self.insert()
         :return: Document
@@ -362,12 +358,12 @@ class Document(
 
     @classmethod
     def insert_one(
-        cls: Type[DocType],
-        document: DocType,
-        session: Optional[ClientSession] = None,
+        cls,
+        document: Self,
+        session: ClientSession | None = None,
         bulk_writer: Optional["BulkWriter"] = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
-    ) -> Optional[DocType]:
+    ) -> Self | None:
         """
         Insert one document to the collection
         :param document: Document - document to insert
@@ -402,9 +398,9 @@ class Document(
 
     @classmethod
     def insert_many(
-        cls: Type[DocType],
-        documents: Iterable[DocType],
-        session: Optional[ClientSession] = None,
+        cls,
+        documents: Iterable[Self],
+        session: ClientSession | None = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
         **pymongo_kwargs,
     ) -> InsertManyResult:
@@ -436,13 +432,13 @@ class Document(
     @save_state_after
     @validate_self_before
     def replace(
-        self: DocType,
+        self,
         ignore_revision: bool = False,
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
-        skip_actions: Optional[List[Union[ActionDirections, str]]] = None,
-    ) -> DocType:
+        skip_actions: list[ActionDirections | str] | None = None,
+    ) -> Self:
         """
         Fully update the document in the database
 
@@ -482,7 +478,7 @@ class Document(
                         LinkTypes.BACK_LIST,
                         LinkTypes.OPTIONAL_BACK_LIST,
                     ]:
-                        if isinstance(value, List):
+                        if isinstance(value, list):
                             for obj in value:
                                 if isinstance(obj, Document):
                                     obj.replace(
@@ -493,7 +489,7 @@ class Document(
                                     )
 
         use_revision_id = self.get_settings().use_revision
-        find_query: Dict[str, Any] = {"_id": self.id}
+        find_query: dict[str, Any] = {"_id": self.id}
 
         if use_revision_id and not ignore_revision:
             find_query["revision_id"] = self.revision_id
@@ -515,8 +511,8 @@ class Document(
     @save_state_after
     @validate_self_before
     def save(
-        self: DocType,
-        session: Optional[ClientSession] = None,
+        self,
+        session: ClientSession | None = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
         ignore_revision: bool = False,
         **kwargs,
@@ -549,7 +545,7 @@ class Document(
                         LinkTypes.BACK_LIST,
                         LinkTypes.OPTIONAL_BACK_LIST,
                     ]:
-                        if isinstance(value, List):
+                        if isinstance(value, list):
                             for obj in value:
                                 if isinstance(obj, Document):
                                     obj.save(
@@ -592,9 +588,9 @@ class Document(
     def save_changes(
         self,
         ignore_revision: bool = False,
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        skip_actions: Optional[List[Union[ActionDirections, str]]] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
+        skip_actions: list[ActionDirections | str] | None = None,
     ) -> None:
         """
         Save changes.
@@ -625,9 +621,9 @@ class Document(
 
     @classmethod
     def replace_many(
-        cls: Type[DocType],
-        documents: List[DocType],
-        session: Optional[ClientSession] = None,
+        cls,
+        documents: list[Self],
+        session: ClientSession | None = None,
     ) -> None:
         """
         Replace list of documents
@@ -651,10 +647,10 @@ class Document(
         self,
         *args,
         ignore_revision: bool = False,
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        skip_actions: Optional[List[Union[ActionDirections, str]]] = None,
-        skip_sync: Optional[bool] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
+        skip_actions: list[ActionDirections | str] | None = None,
+        skip_sync: bool | None = None,
         **pymongo_kwargs,
     ) -> DocType:  # type: ignore
         """
@@ -676,7 +672,7 @@ class Document(
         use_revision_id = self.get_settings().use_revision
 
         if self.id is not None:
-            find_query: Dict[str, Any] = {"_id": self.id}
+            find_query: dict[str, Any] = {"_id": self.id}
         else:
             find_query = {"_id": PydanticObjectId()}
 
@@ -709,9 +705,9 @@ class Document(
     @classmethod
     def update_all(
         cls,
-        *args: Union[dict, Mapping],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        *args: dict | Mapping,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **pymongo_kwargs,
     ) -> UpdateMany:
         """
@@ -729,10 +725,10 @@ class Document(
 
     def set(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        skip_sync: Optional[bool] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
+        skip_sync: bool | None = None,
         **kwargs,
     ):
         """
@@ -768,10 +764,10 @@ class Document(
 
     def current_date(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        skip_sync: Optional[bool] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
+        skip_sync: bool | None = None,
         **kwargs,
     ):
         """
@@ -795,10 +791,10 @@ class Document(
 
     def inc(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
-        skip_sync: Optional[bool] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
+        skip_sync: bool | None = None,
         **kwargs,
     ):
         """
@@ -834,12 +830,12 @@ class Document(
     @wrap_with_actions(EventTypes.DELETE)
     def delete(
         self,
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         link_rule: DeleteRules = DeleteRules.DO_NOTHING,
-        skip_actions: Optional[List[Union[ActionDirections, str]]] = None,
+        skip_actions: list[ActionDirections | str] | None = None,
         **pymongo_kwargs,
-    ) -> Optional[DeleteResult]:
+    ) -> DeleteResult | None:
         """
         Delete the document
 
@@ -872,7 +868,7 @@ class Document(
                         LinkTypes.BACK_LIST,
                         LinkTypes.OPTIONAL_BACK_LIST,
                     ]:
-                        if isinstance(value, List):
+                        if isinstance(value, list):
                             for obj in value:
                                 if isinstance(obj, Document):
                                     obj.delete(
@@ -889,10 +885,10 @@ class Document(
     @classmethod
     def delete_all(
         cls,
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **pymongo_kwargs,
-    ) -> Optional[DeleteResult]:
+    ) -> DeleteResult | None:
         """
         Delete all the documents
 
@@ -949,14 +945,14 @@ class Document(
                 exclude={"revision_id"},
             )
 
-    def get_saved_state(self) -> Optional[Dict[str, Any]]:
+    def get_saved_state(self) -> dict[str, Any] | None:
         """
         Saved state getter. It is protected property.
         :return: Optional[Dict[str, Any]] - saved state
         """
         return self._saved_state
 
-    def get_previous_saved_state(self) -> Optional[Dict[str, Any]]:
+    def get_previous_saved_state(self) -> dict[str, Any] | None:
         """
         Previous state getter. It is a protected property.
         :return: Optional[Dict[str, Any]] - previous state
@@ -987,8 +983,8 @@ class Document(
         return True
 
     def _collect_updates(
-        self, old_dict: Dict[str, Any], new_dict: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, old_dict: dict[str, Any], new_dict: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Compares old_dict with new_dict and returns field paths that have been updated
         Args:
@@ -1026,7 +1022,7 @@ class Document(
         return updates
 
     @saved_state_needed
-    def get_changes(self) -> Dict[str, Any]:
+    def get_changes(self) -> dict[str, Any]:
         return self._collect_updates(
             self._saved_state,  # type: ignore
             get_dict(
@@ -1039,7 +1035,7 @@ class Document(
 
     @saved_state_needed
     @previous_saved_state_needed
-    def get_previous_changes(self) -> Dict[str, Any]:
+    def get_previous_changes(self) -> dict[str, Any]:
         if self._previous_saved_state is None:
             return {}
 
@@ -1053,7 +1049,7 @@ class Document(
         if self.is_changed:
             for key, value in self._saved_state.items():  # type: ignore
                 if key == "_id":
-                    setattr(self, "id", value)
+                    self.id = value
                 else:
                     setattr(self, key, value)
 
@@ -1073,7 +1069,7 @@ class Document(
 
     @classmethod
     def inspect_collection(
-        cls, session: Optional[ClientSession] = None
+        cls, session: ClientSession | None = None
     ) -> InspectionResult:
         """
         Check, if documents, stored in the MongoDB collection
@@ -1132,7 +1128,7 @@ class Document(
             raise DocumentWasNotSaved("Can not create dbref without id")
         return DBRef(self.get_motor_collection().name, self.id)
 
-    def fetch_link(self, field: Union[str, Any]):
+    def fetch_link(self, field: str | Any):
         ref_obj = getattr(self, field, None)
         if isinstance(ref_obj, Link):
             value = ref_obj.fetch(fetch_links=True)
@@ -1148,7 +1144,7 @@ class Document(
                 self.fetch_link(ref.field_name)
 
     @classmethod
-    def get_link_fields(cls) -> Optional[Dict[str, LinkInfo]]:
+    def get_link_fields(cls) -> dict[str, LinkInfo] | None:
         return cls._link_fields
 
     @classmethod
@@ -1159,8 +1155,8 @@ class Document(
     def distinct(
         cls,
         key: str,
-        filter: Optional[Mapping[str, Any]] = None,
-        session: Optional[ClientSession] = None,
+        filter: Mapping[str, Any] | None = None,
+        session: ClientSession | None = None,
         **kwargs: Any,
     ) -> list:
         return cls.get_motor_collection().distinct(
