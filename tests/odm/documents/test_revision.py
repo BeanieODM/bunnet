@@ -128,9 +128,8 @@ def test_update_bulk_writer():
 
     doc.revision_id = "wrong"
     doc.num_1 = 4
-    with pytest.raises(BulkWriteError):
-        with BulkWriter() as bulk_writer:
-            doc.save(bulk_writer=bulk_writer)
+    with pytest.raises(BulkWriteError), BulkWriter() as bulk_writer:
+        doc.save(bulk_writer=bulk_writer)
 
     with BulkWriter() as bulk_writer:
         doc.save(bulk_writer=bulk_writer, ignore_revision=True)

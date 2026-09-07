@@ -13,14 +13,11 @@ from bunnet.odm.utils.typing import get_index_attributes
 if sys.version_info >= (3, 8):
     from typing import get_args, get_origin
 else:
-    from typing_extensions import get_args, get_origin
+    from typing import get_args, get_origin
 
 import importlib
 import inspect
 from typing import (  # type: ignore
-    List,
-    Optional,
-    Type,
     Union,
     _GenericAlias,
 )
@@ -57,11 +54,9 @@ class Output(BaseModel):
 class Initializer:
     def __init__(
         self,
-        database: Optional[Database] = None,
-        connection_string: Optional[str] = None,
-        document_models: Optional[
-            List[Union[Type["DocType"], Type["View"], str]]
-        ] = None,
+        database: Database | None = None,
+        connection_string: str | None = None,
+        document_models: list[type["DocType"] | type["View"] | str] | None = None,
         allow_index_dropping: bool = False,
         recreate_views: bool = False,
         multiprocessing_mode: bool = False,
@@ -81,11 +76,11 @@ class Initializer:
         :return: None
         """
 
-        self.inited_classes: List[Type] = []
+        self.inited_classes: list[type] = []
         self.allow_index_dropping = allow_index_dropping
         self.recreate_views = recreate_views
 
-        self.models_with_updated_forward_refs: List[Type[BaseModel]] = []
+        self.models_with_updated_forward_refs: list[type[BaseModel]] = []
 
         if (connection_string is None and database is None) or (
             connection_string is not None and database is not None
@@ -107,7 +102,7 @@ class Initializer:
             ModelType.View: 2,
         }
 
-        self.document_models: List[Union[Type[DocType], Type[View]]] = [
+        self.document_models: list[type[DocType | View]] = [
             self.get_model(model) if isinstance(model, str) else model
             for model in document_models
         ]
@@ -132,7 +127,7 @@ class Initializer:
                     DocsRegistry.register(name, obj)
 
     @staticmethod
-    def get_model(dot_path: str) -> Type["DocType"]:
+    def get_model(dot_path: str) -> type["DocType"]:
         """
         Get the model by the path in format bar.foo.Model
 
@@ -155,7 +150,7 @@ class Initializer:
             )
 
     def init_settings(
-        self, cls: Union[Type[Document], Type[View], Type[UnionDoc]]
+        self, cls: type[Document] | type[View] | type[UnionDoc]
     ):
         """
         Init Settings
@@ -179,7 +174,7 @@ class Initializer:
 
     if not IS_PYDANTIC_V2:
 
-        def update_forward_refs(self, cls: Type[BaseModel]):
+        def update_forward_refs(self, cls: type[BaseModel]):
             """
             Update forward refs
 
@@ -194,7 +189,7 @@ class Initializer:
 
     def detect_link(
         self, field: FieldInfo, field_name: str
-    ) -> Optional[LinkInfo]:
+    ) -> LinkInfo | None:
         """
         It detects link and returns LinkInfo if any found.
 
@@ -234,7 +229,7 @@ class Initializer:
 
             # Check if annotation is List[custom class]
             elif (
-                (origin is List or origin is list)
+                (origin is list or origin is list)
                 and len(args) == 1
                 and isinstance(args[0], _GenericAlias)
                 and args[0].__origin__ is cls
@@ -283,7 +278,7 @@ class Initializer:
                         )
 
                 elif (
-                    (optional_origin is List or optional_origin is list)
+                    (optional_origin is list or optional_origin is list)
                     and len(optional_args) == 1
                     and isinstance(optional_args[0], _GenericAlias)
                     and optional_args[0].__origin__ is cls
@@ -325,7 +320,7 @@ class Initializer:
     # Document
 
     @staticmethod
-    def set_default_class_vars(cls: Type[Document]):
+    def set_default_class_vars(cls: type[Document]):
         """
         Set default class variables.
 
@@ -488,7 +483,7 @@ class Initializer:
         ]
 
         if document_settings.merge_indexes:
-            result: List[IndexModelField] = []
+            result: list[IndexModelField] = []
             for subclass in reversed(cls.mro()):
                 if issubclass(subclass, Document) and not subclass == Document:
                     if (
@@ -526,7 +521,7 @@ class Initializer:
                 IndexModelField.list_to_index_model(new_indexes)
             )
 
-    def init_document(self, cls: Type[Document]) -> Optional[Output]:
+    def init_document(self, cls: type[Document]) -> Output | None:
         """
         Init Document-based class
 
@@ -634,7 +629,7 @@ class Initializer:
         view_settings.motor_db = self.database
         view_settings.motor_collection = self.database[view_settings.name]
 
-    def init_view(self, cls: Type[View]):
+    def init_view(self, cls: type[View]):
         """
         Init View-based class
 
@@ -663,7 +658,7 @@ class Initializer:
 
     # Union Doc
 
-    def init_union_doc(self, cls: Type[UnionDoc]):
+    def init_union_doc(self, cls: type[UnionDoc]):
         """
         Init Union Doc based class
 
@@ -682,7 +677,7 @@ class Initializer:
 
     @staticmethod
     def check_deprecations(
-        cls: Union[Type[Document], Type[View], Type[UnionDoc]]
+        cls: type[Document] | type[View] | type[UnionDoc],
     ):
         if hasattr(cls, "Collection"):
             raise Deprecation(
@@ -694,7 +689,7 @@ class Initializer:
     # Final
 
     def init_class(
-        self, cls: Union[Type[Document], Type[View], Type[UnionDoc]]
+        self, cls: type[Document] | type[View] | type[UnionDoc]
     ):
         """
         Init Document, View or UnionDoc based class.
@@ -718,11 +713,9 @@ class Initializer:
 
 
 def init_bunnet(
-    database: Optional[Database] = None,
-    connection_string: Optional[str] = None,
-    document_models: Optional[
-        List[Union[Type["DocType"], Type["View"], str]]
-    ] = None,
+    database: Database | None = None,
+    connection_string: str | None = None,
+    document_models: list[type["DocType"] | type["View"] | str] | None = None,
     allow_index_dropping: bool = False,
     recreate_views: bool = False,
     multiprocessing_mode: bool = False,

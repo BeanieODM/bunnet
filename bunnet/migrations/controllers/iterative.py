@@ -1,5 +1,5 @@
 from inspect import isclass, signature
-from typing import List, Optional, Type, Union
+from typing import Union
 
 from bunnet.migrations.controllers.base import BaseMigrationController
 from bunnet.migrations.utils import update_dict
@@ -9,7 +9,7 @@ from bunnet.odm.utils.pydantic import parse_model
 
 class DummyOutput:
     def __init__(self):
-        super(DummyOutput, self).__setattr__("_internal_structure_dict", {})
+        super().__setattr__("_internal_structure_dict", {})
 
     def __setattr__(self, key, value):
         self._internal_structure_dict[key] = value
@@ -21,7 +21,7 @@ class DummyOutput:
             self._internal_structure_dict[item] = DummyOutput()
             return self._internal_structure_dict[item]
 
-    def dict(self, to_parse: Optional[Union[dict, "DummyOutput"]] = None):
+    def dict(self, to_parse: Union[dict, "DummyOutput"] | None = None):
         if to_parse is None:
             to_parse = self
         input_dict = (
@@ -39,7 +39,7 @@ class DummyOutput:
 
 
 def iterative_migration(
-    document_models: Optional[List[Type[Document]]] = None,
+    document_models: list[type[Document]] | None = None,
     batch_size: int = 10000,
 ):
     class IterativeMigration(BaseMigrationController):
@@ -51,17 +51,17 @@ def iterative_migration(
             )
             if input_signature is None:
                 raise RuntimeError("input_signature must not be None")
-            self.input_document_model: Type[  # type: ignore
-                Document
-            ] = input_signature.annotation
+            self.input_document_model: type[Document] = (  # type: ignore
+                input_signature.annotation
+            )
             output_signature = self.function_signature.parameters.get(
                 "output_document"
             )
             if output_signature is None:
                 raise RuntimeError("output_signature must not be None")
-            self.output_document_model: Type[  # type: ignore
-                Document
-            ] = output_signature.annotation
+            self.output_document_model: type[Document] = (  # type: ignore
+                output_signature.annotation
+            )
 
             if (
                 not isclass(self.input_document_model)
@@ -80,7 +80,7 @@ def iterative_migration(
             pass
 
         @property
-        def models(self) -> List[Type[Document]]:
+        def models(self) -> list[type[Document]]:
             preset_models = document_models
             if preset_models is None:
                 preset_models = []

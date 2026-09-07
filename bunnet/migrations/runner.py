@@ -1,7 +1,7 @@
 import logging
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from typing import List, Optional, Type
+from typing import Optional
 
 from pymongo.client_session import ClientSession
 from pymongo.database import Database
@@ -23,8 +23,8 @@ class MigrationNode:
     def __init__(
         self,
         name: str,
-        forward_class: Optional[Type[Document]] = None,
-        backward_class: Optional[Type[Document]] = None,
+        forward_class: type[Document] | None = None,
+        backward_class: type[Document] | None = None,
         next_migration: Optional["MigrationNode"] = None,
         prev_migration: Optional["MigrationNode"] = None,
     ):
@@ -74,7 +74,7 @@ class MigrationNode:
         if mode.direction == RunningDirections.FORWARD:
             migration_node = self.next_migration
             if migration_node is None:
-                return None
+                return
             if mode.distance == 0:
                 logger.info("Running migrations forward without limit")
                 while True:
@@ -140,7 +140,7 @@ class MigrationNode:
             self.clean_current_migration()
 
     def run_migration_class(
-        self, cls: Type, allow_index_dropping: bool, use_transaction: bool
+        self, cls: type, allow_index_dropping: bool, use_transaction: bool
     ):
         """
         Run Backward or Forward migration class
@@ -170,7 +170,7 @@ class MigrationNode:
 
     def run_migrations(
         self,
-        migrations: List[BaseMigrationController],
+        migrations: list[BaseMigrationController],
         db: Database,
         allow_index_dropping: bool,
         session: ClientSession,
