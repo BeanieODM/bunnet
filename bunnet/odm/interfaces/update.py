@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import Any, Dict, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any
 
 from pymongo.client_session import ClientSession
 
@@ -21,17 +22,17 @@ class UpdateMethods:
     def update(
         self,
         *args: Mapping[str, Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **kwargs,
     ):
         return self
 
     def set(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **kwargs,
     ):
         """
@@ -62,9 +63,9 @@ class UpdateMethods:
 
     def current_date(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **kwargs,
     ):
         """
@@ -86,9 +87,9 @@ class UpdateMethods:
 
     def inc(
         self,
-        expression: Dict[Union[ExpressionField, str], Any],
-        session: Optional[ClientSession] = None,
-        bulk_writer: Optional[BulkWriter] = None,
+        expression: dict[ExpressionField | str, Any],
+        session: ClientSession | None = None,
+        bulk_writer: BulkWriter | None = None,
         **kwargs,
     ):
         """

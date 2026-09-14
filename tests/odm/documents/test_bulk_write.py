@@ -94,9 +94,8 @@ def test_replace(documents, document_not_inserted):
 
 
 def test_internal_error(document):
-    with pytest.raises(BulkWriteError):
-        with BulkWriter() as bulk_writer:
-            DocumentTestModel.insert_one(document, bulk_writer=bulk_writer)
+    with pytest.raises(BulkWriteError), BulkWriter() as bulk_writer:
+        DocumentTestModel.insert_one(document, bulk_writer=bulk_writer)
 
 
 def test_native_upsert_found(documents, document_not_inserted):
