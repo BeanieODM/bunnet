@@ -1,11 +1,8 @@
 from abc import abstractmethod
 from typing import (
     Any,
-    Dict,
     Generic,
     List,
-    Optional,
-    Type,
     TypeVar,
     cast,
 )
@@ -28,16 +25,13 @@ class BaseCursorQuery(Generic[CursorResultType], RunInterface):
     lazy_parse = False
 
     @abstractmethod
-    def get_projection_model(self) -> Optional[Type[BaseModel]]:
-        ...
+    def get_projection_model(self) -> type[BaseModel] | None: ...
 
     @property
     @abstractmethod
-    def motor_cursor(self):
-        ...
+    def motor_cursor(self): ...
 
-    def _cursor_params(self):
-        ...
+    def _cursor_params(self): ...
 
     def __iter__(self):
         if self.cursor is None:
@@ -54,15 +48,13 @@ class BaseCursorQuery(Generic[CursorResultType], RunInterface):
         return parse_obj(projection, next_item, lazy_parse=self.lazy_parse)  # type: ignore
 
     @abstractmethod
-    def _get_cache(self) -> List[Dict[str, Any]]:
-        ...
+    def _get_cache(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def _set_cache(self, data):
-        ...
+    def _set_cache(self, data): ...
 
     def to_list(
-        self, length: Optional[int] = None
+        self, length: int | None = None
     ) -> List[CursorResultType]:  # noqa
         """
         Get list of documents
@@ -73,7 +65,7 @@ class BaseCursorQuery(Generic[CursorResultType], RunInterface):
         cursor = self.motor_cursor
         if cursor is None:
             raise RuntimeError("self.motor_cursor was not set")
-        motor_list: List[Dict[str, Any]] = self._get_cache()
+        motor_list: list[dict[str, Any]] = self._get_cache()
 
         if motor_list is None:
             motor_list = list(cursor)[:length]
@@ -81,13 +73,13 @@ class BaseCursorQuery(Generic[CursorResultType], RunInterface):
         projection = self.get_projection_model()
         if projection is not None:
             return cast(
-                List[CursorResultType],
+                list[CursorResultType],
                 [
                     parse_obj(projection, i, lazy_parse=self.lazy_parse)
                     for i in motor_list
                 ],
             )
-        return cast(List[CursorResultType], motor_list)
+        return cast(list[CursorResultType], motor_list)
 
     def run(self):
         return self.to_list()
