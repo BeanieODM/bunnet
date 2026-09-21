@@ -1,4 +1,3 @@
-from typing import List
 
 from pydantic import BaseModel
 
@@ -21,4 +20,4 @@ class InspectionResult(BaseModel):
     """
 
     status: InspectionStatuses = InspectionStatuses.OK
-    errors: List[InspectionError] = []
+    errors: list[InspectionError] = []

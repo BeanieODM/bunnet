@@ -1,4 +1,3 @@
-from typing import List
 
 import pytest
 from pydantic.fields import Field
@@ -100,9 +99,11 @@ def houses():
         house = House(
             door=Door(
                 t=i,
-                window=Window(x=20, y=21 + i, lock=Lock(k=20 + i))
-                if i % 2 == 0
-                else None,
+                window=(
+                    Window(x=20, y=21 + i, lock=Lock(k=20 + i))
+                    if i % 2 == 0
+                    else None
+                ),
                 locks=[Lock(k=20 + i)],
             ),
             windows=[
@@ -830,7 +831,7 @@ class TestSaveBackLinks:
 class HouseForReversedOrderInit(Document):
     name: str
     door: Link["DoorForReversedOrderInit"]
-    owners: List[Link["PersonForReversedOrderInit"]]
+    owners: list[Link["PersonForReversedOrderInit"]]
 
 
 class DoorForReversedOrderInit(Document):
@@ -849,11 +850,11 @@ class DoorForReversedOrderInit(Document):
 class PersonForReversedOrderInit(Document):
     name: str
     if IS_PYDANTIC_V2:
-        house: List[BackLink[HouseForReversedOrderInit]] = Field(
+        house: list[BackLink[HouseForReversedOrderInit]] = Field(
             json_schema_extra={"original_field": "owners"}
         )
     else:
-        house: List[BackLink[HouseForReversedOrderInit]] = Field(
+        house: list[BackLink[HouseForReversedOrderInit]] = Field(
             original_field="owners"
         )
 

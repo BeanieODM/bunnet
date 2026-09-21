@@ -30,11 +30,13 @@ class Note(Document):
 
 class Forward:
     @iterative_migration()
-    def name_to_title(self, input_document: OldNote, output_document: Note):
-        ...
+    def name_to_title(
+        self, input_document: OldNote, output_document: Note
+    ): ...
 
 
 class Backward:
     @iterative_migration()
-    def title_to_name(self, input_document: Note, output_document: OldNote):
-        ...
+    def title_to_name(
+        self, input_document: Note, output_document: OldNote
+    ): ...
