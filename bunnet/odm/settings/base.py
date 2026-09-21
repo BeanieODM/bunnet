@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Any, Dict, Optional, Type
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pymongo.collection import Collection
@@ -12,19 +12,19 @@ if IS_PYDANTIC_V2:
 
 
 class ItemSettings(BaseModel):
-    name: Optional[str] = None
+    name: str | None = None
 
     use_cache: bool = False
     cache_capacity: int = 32
     cache_expiration_time: timedelta = timedelta(minutes=10)
-    bson_encoders: Dict[Any, Any] = Field(default_factory=dict)
-    projection: Optional[Dict[str, Any]] = None
+    bson_encoders: dict[Any, Any] = Field(default_factory=dict)
+    projection: dict[str, Any] | None = None
 
-    motor_db: Optional[Database] = None
-    motor_collection: Optional[Collection] = None
+    motor_db: Database | None = None
+    motor_collection: Collection | None = None
 
-    union_doc: Optional[Type] = None
-    union_doc_alias: Optional[str] = None
+    union_doc: type | None = None
+    union_doc_alias: str | None = None
     class_id: str = "_class_id"
 
     is_root: bool = False

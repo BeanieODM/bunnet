@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from random import randint
-from typing import List
 
 import pytest
 
@@ -316,7 +315,7 @@ def document_not_inserted():
 def documents_not_inserted():
     def generate_documents(
         number: int, test_str: str = None, random: bool = False
-    ) -> List[DocumentTestModel]:
+    ) -> list[DocumentTestModel]:
         return [
             DocumentTestModel(
                 test_int=randint(0, 1000000) if random else i,
