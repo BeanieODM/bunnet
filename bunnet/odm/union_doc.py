@@ -1,4 +1,4 @@
-from typing import ClassVar, Dict, Optional, Type
+from typing import ClassVar
 
 from bunnet.exceptions import UnionDocNotInited
 from bunnet.odm.interfaces.aggregate import AggregateInterface
@@ -14,7 +14,7 @@ class UnionDoc(
     OtherGettersInterface,
     DetectionInterface,
 ):
-    _document_models: ClassVar[Optional[Dict[str, Type]]] = None
+    _document_models: ClassVar[dict[str, type] | None] = None
     _is_inited: ClassVar[bool] = False
     _settings: ClassVar[UnionDocSettings]
 
@@ -23,7 +23,7 @@ class UnionDoc(
         return cls._settings
 
     @classmethod
-    def register_doc(cls, name: str, doc_model: Type):
+    def register_doc(cls, name: str, doc_model: type):
         if cls._document_models is None:
             cls._document_models = {}
 

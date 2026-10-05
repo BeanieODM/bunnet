@@ -1,8 +1,7 @@
-from typing import Any
+from typing import Annotated, Any
 
 import bson
 import pydantic
-from typing_extensions import Annotated
 
 from bunnet.odm.utils.pydantic import IS_PYDANTIC_V2
 

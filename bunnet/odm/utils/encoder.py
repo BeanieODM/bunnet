@@ -7,16 +7,16 @@ import operator
 import pathlib
 import re
 import uuid
-from enum import Enum
-from typing import (
-    Any,
+from collections.abc import (
     Callable,
     Container,
     Iterable,
     Mapping,
     MutableMapping,
-    Optional,
-    Tuple,
+)
+from enum import Enum
+from typing import (
+    Any,
 )
 
 import bson
@@ -143,7 +143,7 @@ class Encoder:
 
     def _iter_model_items(
         self, obj: pydantic.BaseModel
-    ) -> Iterable[Tuple[str, Any]]:
+    ) -> Iterable[tuple[str, Any]]:
         exclude, keep_nulls = self.exclude, self.keep_nulls
         get_model_field = get_model_fields(obj).get
         for key, value in obj.__iter__():
@@ -156,7 +156,7 @@ class Encoder:
 
 def _get_encoder(
     obj: Any, custom_encoders: Mapping[type, SingleArgCallable]
-) -> Optional[SingleArgCallable]:
+) -> SingleArgCallable | None:
     encoder = custom_encoders.get(type(obj))
     if encoder is not None:
         return encoder

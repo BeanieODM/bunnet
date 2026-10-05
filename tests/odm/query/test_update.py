@@ -54,7 +54,7 @@ def test_update_many(preset_documents):
         Sample.nested.optional == None
     ).update(
         Set({Sample.increment: 100})
-    ).run()  # noqa
+    ).run()
     result = Sample.find_many(Sample.increment == 100).to_list()
     assert len(result) == 3
     for sample in result:
@@ -66,7 +66,7 @@ def test_update_many_linked_method(preset_documents):
         Sample.nested.optional == None
     ).update_many(
         Set({Sample.increment: 100})
-    ).run()  # noqa
+    ).run()
     result = Sample.find_many(Sample.increment == 100).to_list()
     assert len(result) == 3
     for sample in result:
@@ -136,7 +136,7 @@ def test_update_many_with_session(preset_documents, session):
     )
     # assert q.session == session
 
-    # q  # noqa
+    # q
     result = Sample.find_many(Sample.increment == 100).to_list()
     assert len(result) == 3
     for sample in result:
