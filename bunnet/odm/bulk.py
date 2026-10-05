@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Mapping, Optional, Type, Union
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pymongo import (
@@ -19,18 +20,11 @@ if IS_PYDANTIC_V2:
 
 
 class Operation(BaseModel):
-    operation: Union[
-        Type[InsertOne],
-        Type[DeleteOne],
-        Type[DeleteMany],
-        Type[ReplaceOne],
-        Type[UpdateOne],
-        Type[UpdateMany],
-    ]
+    operation: type[InsertOne] | type[DeleteOne] | type[DeleteMany] | type[ReplaceOne] | type[UpdateOne] | type[UpdateMany]
     first_query: Mapping[str, Any]
-    second_query: Optional[Dict[str, Any]] = None
-    pymongo_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    object_class: Type
+    second_query: dict[str, Any] | None = None
+    pymongo_kwargs: dict[str, Any] = Field(default_factory=dict)
+    object_class: type
 
     if IS_PYDANTIC_V2:
         model_config = ConfigDict(
@@ -43,8 +37,8 @@ class Operation(BaseModel):
 
 
 class BulkWriter:
-    def __init__(self, session: Optional[ClientSession] = None):
-        self.operations: List[Operation] = []
+    def __init__(self, session: ClientSession | None = None):
+        self.operations: list[Operation] = []
         self.session = session
 
     def __enter__(self):
@@ -53,7 +47,7 @@ class BulkWriter:
     def __exit__(self, exc_type, exc, tb):
         self.commit()
 
-    def commit(self) -> Optional[BulkWriteResult]:
+    def commit(self) -> BulkWriteResult | None:
         """
         Commit all the operations to the database
         :return:

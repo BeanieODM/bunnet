@@ -1,4 +1,4 @@
-from typing import Any, ClassVar, Dict, Optional, Union
+from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
@@ -27,7 +27,7 @@ class View(
     """
 
     # Relations
-    _link_fields: ClassVar[Optional[Dict[str, LinkInfo]]] = None
+    _link_fields: ClassVar[dict[str, LinkInfo] | None] = None
 
     # Settings
     _settings: ClassVar[ViewSettings]
@@ -44,7 +44,7 @@ class View(
             raise ViewWasNotInitialized
         return cls._settings
 
-    def fetch_link(self, field: Union[str, Any]):
+    def fetch_link(self, field: str | Any):
         ref_obj = getattr(self, field, None)
         if isinstance(ref_obj, Link):
             value = ref_obj.fetch(fetch_links=True)
@@ -60,7 +60,7 @@ class View(
                 self.fetch_link(ref.field_name)  # TODO lists
 
     @classmethod
-    def get_link_fields(cls) -> Optional[Dict[str, LinkInfo]]:
+    def get_link_fields(cls) -> dict[str, LinkInfo] | None:
         return cls._link_fields
 
     @classmethod

@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Type, TypeVar, Union, overload
+from typing import Any, TypeVar, overload
 
 from pydantic import BaseModel
 from pymongo.client_session import ClientSession
@@ -20,39 +20,34 @@ class AggregateInterface:
     @overload
     @classmethod
     def aggregate(
-        cls: Type[DocType],
+        cls: type[DocType],
         aggregation_pipeline: list,
         projection_model: None = None,
-        session: Optional[ClientSession] = None,
+        session: ClientSession | None = None,
         ignore_cache: bool = False,
         **pymongo_kwargs,
-    ) -> AggregationQuery[Dict[str, Any]]:
-        ...
+    ) -> AggregationQuery[dict[str, Any]]: ...
 
     @overload
     @classmethod
     def aggregate(
-        cls: Type[DocType],
+        cls: type[DocType],
         aggregation_pipeline: list,
-        projection_model: Type[DocumentProjectionType],
-        session: Optional[ClientSession] = None,
+        projection_model: type[DocumentProjectionType],
+        session: ClientSession | None = None,
         ignore_cache: bool = False,
         **pymongo_kwargs,
-    ) -> AggregationQuery[DocumentProjectionType]:
-        ...
+    ) -> AggregationQuery[DocumentProjectionType]: ...
 
     @classmethod
     def aggregate(
-        cls: Type[DocType],
+        cls,
         aggregation_pipeline: list,
-        projection_model: Optional[Type[DocumentProjectionType]] = None,
-        session: Optional[ClientSession] = None,
+        projection_model: type[DocumentProjectionType] | None = None,
+        session: ClientSession | None = None,
         ignore_cache: bool = False,
         **pymongo_kwargs,
-    ) -> Union[
-        AggregationQuery[Dict[str, Any]],
-        AggregationQuery[DocumentProjectionType],
-    ]:
+    ) -> AggregationQuery[dict[str, Any]] | AggregationQuery[DocumentProjectionType]:
         """
         Aggregate over collection.
         Returns [AggregationQuery](https://roman-right.github.io/bunnet/api/queries/#aggregationquery) query object

@@ -1,4 +1,3 @@
-from typing import Optional
 
 import pytest
 from bson import ObjectId
@@ -38,8 +37,8 @@ def test_validate_on_save_changes():
 
 def test_validate_on_save_keep_the_id_type():
     class UpdateModel(BaseModel):
-        num_1: Optional[int] = None
-        related: Optional[PydanticObjectId] = None
+        num_1: int | None = None
+        related: PydanticObjectId | None = None
 
     doc = DocumentWithValidationOnSave(num_1=1, num_2=2)
     doc.insert()

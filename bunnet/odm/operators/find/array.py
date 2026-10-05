@@ -1,11 +1,9 @@
 from abc import ABC
-from typing import Optional
 
 from bunnet.odm.operators.find import BaseFindOperator
 
 
-class BaseFindArrayOperator(BaseFindOperator, ABC):
-    ...
+class BaseFindArrayOperator(BaseFindOperator, ABC): ...
 
 
 class All(BaseFindArrayOperator):
@@ -70,7 +68,7 @@ class ElemMatch(BaseFindArrayOperator):
     def __init__(
         self,
         field,
-        expression: Optional[dict] = None,
+        expression: dict | None = None,
         **kwargs,
     ):
         self.field = field

@@ -1,4 +1,3 @@
-from typing import Union
 
 from bunnet.odm.fields import ExpressionField
 from bunnet.odm.operators.find import BaseFindOperator
@@ -7,7 +6,7 @@ from bunnet.odm.operators.find import BaseFindOperator
 class BaseFindBitwiseOperator(BaseFindOperator):
     operator = ""
 
-    def __init__(self, field: Union[str, ExpressionField], bitmask):
+    def __init__(self, field: str | ExpressionField, bitmask):
         self.field = field
         self.bitmask = bitmask
 

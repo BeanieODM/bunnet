@@ -5,11 +5,7 @@ from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
     Generic,
-    List,
-    Optional,
-    Type,
     TypeVar,
     Union,
 )
@@ -17,10 +13,9 @@ from typing import (
 if sys.version_info >= (3, 8):
     from typing import get_args
 else:
-    from typing_extensions import get_args
+    from typing import get_args
 
-from typing import OrderedDict as OrderedDictType
-from typing import Tuple
+from collections import OrderedDict as OrderedDictType
 
 from bson import DBRef, ObjectId
 from bson.errors import InvalidId
@@ -69,7 +64,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class IndexedAnnotation:
-    _indexed: Tuple[int, Dict[str, Any]]
+    _indexed: tuple[int, dict[str, Any]]
 
 
 def Indexed(typ=None, index_type=ASCENDING, **kwargs):
@@ -186,9 +181,9 @@ class PydanticObjectId(ObjectId):
 
 
 if not IS_PYDANTIC_V2:
-    ENCODERS_BY_TYPE[
-        PydanticObjectId
-    ] = str  # it is a workaround to force pydantic make json schema for this field
+    ENCODERS_BY_TYPE[PydanticObjectId] = (
+        str  # it is a workaround to force pydantic make json schema for this field
+    )
 
 BunnetObjectId = PydanticObjectId
 
@@ -217,7 +212,7 @@ class ExpressionField(str):
 
     def __eq__(self, other):
         if isinstance(other, ExpressionField):
-            return super(ExpressionField, self).__eq__(other)
+            return super().__eq__(other)
         return Eq(field=self, other=other)
 
     def __gt__(self, other):
@@ -273,9 +268,9 @@ class LinkTypes(str, Enum):
 class LinkInfo(BaseModel):
     field_name: str
     lookup_field_name: str
-    document_class: Type[BaseModel]  # Document class
+    document_class: type[BaseModel]  # Document class
     link_type: LinkTypes
-    nested_links: Optional[Dict] = None
+    nested_links: dict | None = None
     is_fetchable: bool = True
 
 
@@ -283,7 +278,7 @@ T = TypeVar("T")
 
 
 class Link(Generic[T]):
-    def __init__(self, ref: DBRef, document_class: Type[T]):
+    def __init__(self, ref: DBRef, document_class: type[T]):
         self.ref = ref
         self.document_class = document_class
 
@@ -299,7 +294,7 @@ class Link(Generic[T]):
 
     @classmethod
     def fetch_list(
-        cls, links: List[Union["Link", "DocType"]], fetch_links: bool = False
+        cls, links: list[Union["Link", "DocType"]], fetch_links: bool = False
     ):
         """
         Fetch list that contains links and documents
@@ -335,7 +330,7 @@ class Link(Generic[T]):
 
     @staticmethod
     def repack_links(
-        links: List[Union["Link", "DocType"]]
+        links: list[Union["Link", "DocType"]],
     ) -> OrderedDictType[Any, Any]:
         result = OrderedDict()
         for link in links:
@@ -346,7 +341,7 @@ class Link(Generic[T]):
         return result
 
     @classmethod
-    def fetch_many(cls, links: List["Link"]):
+    def fetch_many(cls, links: list["Link"]):
         for link in links:
             link.fetch()
 
@@ -360,8 +355,8 @@ class Link(Generic[T]):
 
         @classmethod
         def build_validation(cls, handler, source_type):
-            def validate(v: Union[DBRef, T], validation_info: ValidationInfo):
-                document_class = DocsRegistry.evaluate_fr(get_args(source_type)[0])  # type: ignore  # noqa: F821
+            def validate(v: DBRef | T, validation_info: ValidationInfo):
+                document_class = DocsRegistry.evaluate_fr(get_args(source_type)[0])  # type: ignore
 
                 if isinstance(v, DBRef):
                     return cls(ref=v, document_class=document_class)
@@ -422,7 +417,7 @@ class Link(Generic[T]):
             yield cls.validate
 
         @classmethod
-        def validate(cls, v: Union[DBRef, T], field: ModelField):
+        def validate(cls, v: DBRef | T, field: ModelField):
             document_class = field.sub_fields[0].type_  # type: ignore
             if isinstance(v, DBRef):
                 return cls(ref=v, document_class=document_class)
@@ -452,15 +447,15 @@ if not IS_PYDANTIC_V2:
 class BackLink(Generic[T]):
     """Back reference to a document"""
 
-    def __init__(self, document_class: Type[T]):
+    def __init__(self, document_class: type[T]):
         self.document_class = document_class
 
     if IS_PYDANTIC_V2:
 
         @classmethod
         def build_validation(cls, handler, source_type):
-            def validate(v: Union[DBRef, T], field):
-                document_class = DocsRegistry.evaluate_fr(get_args(source_type)[0])  # type: ignore  # noqa: F821
+            def validate(v: DBRef | T, field):
+                document_class = DocsRegistry.evaluate_fr(get_args(source_type)[0])  # type: ignore
                 if isinstance(v, dict) or isinstance(v, BaseModel):
                     return parse_obj(document_class, v)
                 return cls(document_class=document_class)
@@ -482,7 +477,7 @@ class BackLink(Generic[T]):
             yield cls.validate
 
         @classmethod
-        def validate(cls, v: Union[DBRef, T], field: ModelField):
+        def validate(cls, v: DBRef | T, field: ModelField):
             document_class = field.sub_fields[0].type_  # type: ignore
             if isinstance(v, dict) or isinstance(v, BaseModel):
                 return parse_obj(document_class, v)
@@ -518,7 +513,7 @@ class IndexModelField:
 
     @staticmethod
     def list_difference(
-        left: List["IndexModelField"], right: List["IndexModelField"]
+        left: list["IndexModelField"], right: list["IndexModelField"]
     ):
         result = []
         for index in left:
@@ -527,7 +522,7 @@ class IndexModelField:
         return result
 
     @staticmethod
-    def list_to_index_model(left: List["IndexModelField"]):
+    def list_to_index_model(left: list["IndexModelField"]):
         return [index.index for index in left]
 
     @classmethod
@@ -550,7 +545,7 @@ class IndexModelField:
 
     @staticmethod
     def find_index_with_the_same_fields(
-        indexes: List["IndexModelField"], index: "IndexModelField"
+        indexes: list["IndexModelField"], index: "IndexModelField"
     ):
         for i in indexes:
             if i.same_fields(index):
@@ -559,7 +554,7 @@ class IndexModelField:
 
     @staticmethod
     def merge_indexes(
-        left: List["IndexModelField"], right: List["IndexModelField"]
+        left: list["IndexModelField"], right: list["IndexModelField"]
     ):
         left_dict = {index.fields: index for index in left}
         right_dict = {index.fields: index for index in right}
